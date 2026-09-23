@@ -283,8 +283,12 @@ final class WorkspaceSwipePresentation {
 
         let preview = previewSurface(controller)
         preview.onReadinessChange = { [weak self] in self?.startPendingSwitchIfReady(id: pending.id) }
-        preview.prepare(source: preparation.source.items, destination: destination.items,
-                        monitor: preparation.monitor, workingFrame: preparation.frame)
+        preview.prepare(
+            source: preparation.source.items,
+            destination: destination.items,
+            monitor: preparation.monitor,
+            workingFrame: preparation.frame
+        )
         startPendingSwitchIfReady(id: pending.id)
         return true
     }
