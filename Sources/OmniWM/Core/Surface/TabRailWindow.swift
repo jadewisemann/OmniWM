@@ -114,9 +114,6 @@ final class TabRailWindow: NSPanel {
         }
         railView.update(tabs: info.normalizedTabs, activeVisualIndex: clampedActiveVisualIndex, style: style)
 
-        if accessibilityGeometryChanged {
-            railView.refreshAccessibilityFrames()
-        }
         animationGeometryNeedsAccessibilityRefresh = false
 
         let wasVisible = isVisible
@@ -127,6 +124,9 @@ final class TabRailWindow: NSPanel {
             activeWindowId: info.activeWindowId
         ) {
             orderFront(nil)
+        }
+        if accessibilityGeometryChanged || !wasVisible {
+            railView.refreshAccessibilityFrames()
         }
         syncSurfaceRegistration()
         lastActiveWindowId = info.activeWindowId
