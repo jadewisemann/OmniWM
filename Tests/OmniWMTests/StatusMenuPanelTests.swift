@@ -208,19 +208,19 @@ final class StatusMenuPanelTests: XCTestCase {
         fixture.seedSubmenuRows()
         fixture.host.hoverSubmenu(.advanced, hovered: true)
 
-        try await Task.sleep(for: .milliseconds(225))
+        try await waitForExpandedPage(.advanced, in: fixture.host)
 
         XCTAssertEqual(fixture.host.presentation.expandedPage, .advanced)
         let submenu = try XCTUnwrap(fixture.host.submenuPanel)
         fixture.host.hoverSubmenu(.help, hovered: true)
 
-        try await Task.sleep(for: .milliseconds(225))
+        try await waitForExpandedPage(.help, in: fixture.host)
 
         XCTAssertEqual(fixture.host.presentation.expandedPage, .help)
         XCTAssertTrue(fixture.host.submenuPanel === submenu)
         fixture.host.hoverSubmenu(nil, hovered: true)
 
-        try await Task.sleep(for: .milliseconds(225))
+        try await waitForExpandedPage(nil, in: fixture.host)
 
         XCTAssertNil(fixture.host.presentation.expandedPage)
         XCTAssertFalse(submenu.isVisible)
@@ -296,6 +296,14 @@ final class StatusMenuPanelTests: XCTestCase {
 
     private func makeFixture() -> StatusMenuPanelFixture {
         StatusMenuPanelFixture()
+    }
+
+    private func waitForExpandedPage(_ page: StatusMenuPage?, in host: StatusMenuHost) async throws {
+        for _ in 0 ..< 20 {
+            if host.presentation.expandedPage == page { return }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        XCTFail("Submenu did not reach the expected page")
     }
 }
 
