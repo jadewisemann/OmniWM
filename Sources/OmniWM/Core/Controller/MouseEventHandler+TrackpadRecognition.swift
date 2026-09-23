@@ -196,7 +196,7 @@ extension MouseEventHandler {
         if context.overviewAction == .resume {
             _ = controller?.windowActionHandler.beginOverviewGesture()
         }
-        if let axis = context.workspaceAxis,
+        if let axis = context.workspaceAxis, controller?.hasStartedServices == true,
            controller?.layoutRefreshController.workspaceSwipe.prepare(
                monitorId: context.monitorId, timestamp: timestamp
            ) == true

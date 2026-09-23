@@ -46,7 +46,7 @@ extension MouseEventHandler {
         metrics.traceRecognition(mode, timestamp: timestamp)
         state.activeGestureMode = mode
         state.gesturePhase = .committed
-        if case let .workspaceSwitch(axis) = mode {
+        if case let .workspaceSwitch(axis) = mode, controller.hasStartedServices {
             controller.layoutRefreshController.workspaceSwipe.begin(
                 axis: axis, cumulative: axis == .horizontal ? metrics.cumulativeX : metrics.cumulativeY,
                 timestamp: timestamp,
