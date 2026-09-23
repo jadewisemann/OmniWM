@@ -244,7 +244,7 @@ final class WorkspaceSwipePresentation {
         onActivated: @escaping @MainActor () -> Void = {},
         onFallback: @escaping @MainActor () -> Void
     ) -> Bool {
-        guard let controller, controller.motionPolicy.animationsEnabled,
+        guard let controller, controller.hasStartedServices, controller.motionPolicy.animationsEnabled,
               !controller.isOverviewOpen(),
               let preparation = makePreparation(monitorId: monitorId, destinationWorkspaceId: destinationWorkspaceId),
               let destination = preparation.requestedDestination
