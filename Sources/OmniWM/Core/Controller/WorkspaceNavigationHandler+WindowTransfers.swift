@@ -122,12 +122,26 @@ extension WorkspaceNavigationHandler {
         else {
             return .unchanged
         }
+        let workspaceSwipe = controller.layoutRefreshController.workspaceSwipe
+        workspaceSwipe.cancelPendingSwitch(reason: "window-move", runFallback: false)
+        if workspaceSwipe.flight != nil { workspaceSwipe.cancel(reason: "window-move") }
+        if workspaceSwipe.preparation != nil { workspaceSwipe.stopPreparing() }
+        workspaceSwipe.cancelWindowDeparture()
+        let departureStarted = canTransferWindow(handle, from: currentWorkspaceId)
+            && workspaceSwipe.animateWindowDeparture(
+                handle,
+                from: currentWorkspaceId,
+                to: targetWsId
+            )
         let transferResult = transferWindowFromSourceEngine(
             token: token,
             from: currentWorkspaceId,
             to: targetWsId
         )
-        guard transferResult.succeeded else { return .unchanged }
+        guard transferResult.succeeded else {
+            if departureStarted { controller.layoutRefreshController.workspaceSwipe.cancelWindowDeparture() }
+            return .unchanged
+        }
 
         let targetViewportState = transferredWindowNiriViewportState(
             token: token,

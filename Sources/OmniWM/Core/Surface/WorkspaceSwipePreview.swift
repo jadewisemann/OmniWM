@@ -58,8 +58,12 @@ final class WorkspaceSwipePreview {
     private var panel: WorkspaceSwipePreviewPanel?
     private var sourceLayer: CALayer?
     private var destinationLayer: CALayer?
+    private var departureLayer: CALayer?
+    private var departureCleanupTask: Task<Void, Never>?
     private var contents: [WindowHandle: [Content]] = [:]
     private(set) var isWarming = false
+    var onReadinessChange: @MainActor () -> Void = {}
+    var onDepartureFinished: @MainActor () -> Void = {}
 
     var isVisible: Bool {
         panel?.isVisible == true
@@ -82,7 +86,11 @@ final class WorkspaceSwipePreview {
         capture.onPreview = { [weak self] handle, frame in
             self?.updatePreview(frame, for: handle)
         }
-        capture.onReadinessChange = { [weak self] in self?.finishWarmupIfReady() }
+        capture.onReadinessChange = { [weak self] in
+            guard let self else { return }
+            finishWarmupIfReady()
+            onReadinessChange()
+        }
     }
 
     isolated deinit {
@@ -97,6 +105,18 @@ final class WorkspaceSwipePreview {
             workingFrame: workingFrame,
             warming: false
         )
+    }
+
+    func hasPreviews(source: [Item], destination: [Item], monitor: Monitor, workingFrame: CGRect? = nil) -> Bool {
+        guard hasCaptureAccess() else { return false }
+        let frame = workingFrame ?? monitor.visibleFrame
+        return (source + destination).filter { $0.frame.intersects(frame) }.allSatisfy {
+            tokens[$0.handle] == $0.handle.token && capture.preview(for: $0.handle) != nil
+        }
+    }
+
+    var hasPendingCaptures: Bool {
+        capture.hasPendingFirstFrames
     }
 
     func warm(source: [Item], destination: [Item], monitor: Monitor, workingFrame: CGRect? = nil) {
@@ -134,13 +154,12 @@ final class WorkspaceSwipePreview {
     }
 
     func begin(source: [Item], destination: [Item], monitor: Monitor, workingFrame: CGRect? = nil) -> Bool {
-        guard panel == nil, hasCaptureAccess(), let wallpaperImage = backdrop.image(for: monitor) else { return false }
+        guard panel == nil, hasPreviews(
+            source: source, destination: destination, monitor: monitor, workingFrame: workingFrame
+        ), let wallpaperImage = backdrop.image(for: monitor) else { return false }
         let frame = workingFrame ?? monitor.visibleFrame
         let source = source.filter { $0.frame.intersects(frame) }
         let destination = destination.filter { $0.frame.intersects(frame) }
-        guard (source + destination).allSatisfy({
-            tokens[$0.handle] == $0.handle.token && capture.preview(for: $0.handle) != nil
-        }) else { return false }
 
         let panel = WorkspaceSwipePreviewPanel(frame: frame)
         let root = CALayer()
@@ -200,8 +219,74 @@ final class WorkspaceSwipePreview {
         CATransaction.commit()
     }
 
+    func beginWindowDeparture(item: Item, monitor: Monitor, offset: CGVector) -> Bool {
+        guard panel == nil, hasCaptureAccess(), tokens[item.handle] == item.handle.token,
+              let preview = capture.preview(for: item.handle)
+        else { return false }
+
+        let frame = monitor.visibleFrame
+        let panel = WorkspaceSwipePreviewPanel(frame: frame)
+        let root = CALayer()
+        root.frame = CGRect(origin: .zero, size: frame.size)
+        root.masksToBounds = true
+        let view = NSView(frame: root.frame)
+        view.wantsLayer = true
+        view.layer = root
+        panel.contentView = view
+        let content = Content(
+            preview: preview,
+            frame: item.frame.offsetBy(dx: -frame.minX, dy: -frame.minY),
+            scale: Self.scale(for: monitor)
+        )
+        root.addSublayer(content.layer)
+        contents[item.handle] = [content]
+        departureLayer = content.layer
+        self.panel = panel
+        ownedWindowRegistry.register(
+            panel,
+            surfaceId: "workspace-move-\(monitor.displayId)",
+            policy: SurfacePolicy(
+                kind: .workspaceSwipe,
+                hitTestPolicy: .passthrough,
+                capturePolicy: .excluded,
+                suppressesManagedFocusRecovery: false
+            )
+        )
+        panel.orderFrontRegardless()
+
+        let animation = CABasicAnimation(keyPath: "transform")
+        animation.fromValue = NSValue(caTransform3D: CATransform3DIdentity)
+        animation.toValue = NSValue(caTransform3D: CATransform3DMakeTranslation(offset.dx, offset.dy, 0))
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 1
+        fade.toValue = 0.15
+        let group = CAAnimationGroup()
+        group.animations = [animation, fade]
+        group.duration = 0.24
+        group.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        group.isRemovedOnCompletion = false
+        group.fillMode = .forwards
+        content.layer.transform = CATransform3DMakeTranslation(offset.dx, offset.dy, 0)
+        content.layer.opacity = 0.15
+        content.layer.add(group, forKey: "workspace-window-departure")
+        departureCleanupTask = Task { @MainActor [weak self, weak panel] in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled, let self, self.panel === panel else { return }
+            self.stop()
+            self.onDepartureFinished()
+        }
+        return true
+    }
+
+    func cancelWindowDeparture() {
+        guard departureLayer != nil else { return }
+        stop()
+    }
+
     func stop() {
         isWarming = false
+        departureCleanupTask?.cancel()
+        departureCleanupTask = nil
         let previous = contents.values.flatMap { $0.map(\.preview) }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -214,6 +299,7 @@ final class WorkspaceSwipePreview {
         panel = nil
         sourceLayer = nil
         destinationLayer = nil
+        departureLayer = nil
         contents.removeAll()
         capture.clear()
         CATransaction.commit()

@@ -17,6 +17,7 @@ final class WorkspaceSwipePresentation {
         let source: Workspace
         let previous: Workspace?
         let next: Workspace?
+        let requestedDestination: Workspace?
     }
 
     enum Phase {
@@ -26,6 +27,8 @@ final class WorkspaceSwipePresentation {
     final class Flight {
         let preparation: Preparation
         let destination: Workspace
+        let affectedWorkspaces: Set<WorkspaceDescriptor.ID>
+        let onActivated: @MainActor () -> Void
         let inputSign: Double
         let visualSign: CGFloat
         let motion: WorkspaceSwipeMotion
@@ -43,10 +46,14 @@ final class WorkspaceSwipePresentation {
             cumulative: Double,
             isNext: Bool,
             timestamp: TimeInterval,
-            recognitionMovement: SwipeEvent?
+            recognitionMovement: SwipeEvent?,
+            affectedWorkspaces: Set<WorkspaceDescriptor.ID> = [],
+            onActivated: @escaping @MainActor () -> Void = {}
         ) {
             self.preparation = preparation
             self.destination = destination
+            self.affectedWorkspaces = affectedWorkspaces
+            self.onActivated = onActivated
             inputSign = cumulative < 0 ? -1 : 1
             visualSign = isNext ? 1 : -1
             motion = WorkspaceSwipeMotion(
@@ -72,6 +79,15 @@ final class WorkspaceSwipePresentation {
     private(set) var flight: Flight?
     private var preview: WorkspaceSwipePreview?
     private let mediaTimeProvider: () -> TimeInterval
+    struct PendingSwitch {
+        let id: UUID
+        let flight: Flight
+        let focusIntentId: IntentID?
+        let onFallback: @MainActor () -> Void
+    }
+
+    var pendingSwitch: PendingSwitch?
+    private var pendingSwitchTimeout: Task<Void, Never>?
 
     init(
         refreshController: LayoutRefreshController,
@@ -98,6 +114,7 @@ final class WorkspaceSwipePresentation {
 
     func prepare(monitorId: Monitor.ID, timestamp: TimeInterval) -> Bool {
         guard let controller, controller.motionPolicy.animationsEnabled else { return false }
+        cancelPendingSwitch(reason: "gesture-started", runFallback: false)
         let mediaTime = mediaTimeProvider()
         if let flight, flight.preparation.monitor.id == monitorId, !flight.committing,
            flight.motion.target != nil, flight.motion.catchMotion(
@@ -117,6 +134,7 @@ final class WorkspaceSwipePresentation {
             return false
         }
         self.preparation = preparation
+        preview?.cancelWindowDeparture()
         previewSurface(controller).prepare(
             source: preparation.source.items,
             destination: (preparation.previous?.items ?? []) + (preparation.next?.items ?? []),
@@ -134,7 +152,7 @@ final class WorkspaceSwipePresentation {
               let isNext = TrackpadGestureIntent.isNextWorkspace(
                   axis: axis, displacement: cumulative, naturalDirection: controller.settings.gestures.invertDirection
               ),
-              let destination = isNext ? preparation.next : preparation.previous,
+              let destination = preparation.requestedDestination ?? (isNext ? preparation.next : preparation.previous),
               destination.id != preparation.source.id
         else { return }
         let flight = Flight(
@@ -212,12 +230,181 @@ final class WorkspaceSwipePresentation {
 
     func stopPreparing(warm: Bool = false) {
         guard flight == nil else { return }
+        cancelPendingSwitch(reason: "preparation-stopped")
         preparation = nil
         preview?.stop()
         if warm { warmPreviews() }
     }
 
+    @discardableResult
+    func requestSwitch(
+        to destinationWorkspaceId: WorkspaceDescriptor.ID,
+        on monitorId: Monitor.ID,
+        affectedWorkspaces: Set<WorkspaceDescriptor.ID> = [],
+        onActivated: @escaping @MainActor () -> Void = {},
+        onFallback: @escaping @MainActor () -> Void
+    ) -> Bool {
+        guard let controller, controller.motionPolicy.animationsEnabled,
+              !controller.isOverviewOpen(),
+              let preparation = makePreparation(monitorId: monitorId, destinationWorkspaceId: destinationWorkspaceId),
+              let destination = preparation.requestedDestination
+        else { return false }
+
+        preview?.cancelWindowDeparture()
+        cancelPendingSwitch(reason: "superseded", runFallback: false)
+        if flight != nil { cancel(reason: "programmatic-switch") }
+        let ordered = controller.workspaceManager.workspaces(on: monitorId)
+        let sourceIndex = ordered.firstIndex(where: { $0.id == preparation.source.id }) ?? 0
+        let destinationIndex = ordered.firstIndex(where: { $0.id == destination.id }) ?? 0
+        let forwardDistance = (destinationIndex - sourceIndex + ordered.count) % max(ordered.count, 1)
+        let backwardDistance = (sourceIndex - destinationIndex + ordered.count) % max(ordered.count, 1)
+        let flight = Flight(
+            preparation: preparation,
+            destination: destination,
+            cumulative: 0,
+            isNext: forwardDistance <= backwardDistance,
+            timestamp: mediaTimeProvider(),
+            recognitionMovement: nil,
+            affectedWorkspaces: affectedWorkspaces,
+            onActivated: onActivated
+        )
+        let pending = PendingSwitch(
+            id: UUID(),
+            flight: flight,
+            focusIntentId: controller.intentLedger.newestFocusIntentId(),
+            onFallback: onFallback
+        )
+        pendingSwitch = pending
+        pendingSwitchTimeout = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(220))
+            guard !Task.isCancelled else { return }
+            self?.fallbackPendingSwitch(id: pending.id, reason: "capture-timeout")
+        }
+
+        let preview = previewSurface(controller)
+        preview.onReadinessChange = { [weak self] in self?.startPendingSwitchIfReady(id: pending.id) }
+        preview.prepare(source: preparation.source.items, destination: destination.items,
+                        monitor: preparation.monitor, workingFrame: preparation.frame)
+        startPendingSwitchIfReady(id: pending.id)
+        return true
+    }
+
+    func cancelPendingSwitch(reason: String, runFallback: Bool = false) {
+        guard let pendingSwitch else { return }
+        self.pendingSwitch = nil
+        pendingSwitchTimeout?.cancel()
+        pendingSwitchTimeout = nil
+        preview?.stop()
+        trace(reason)
+        if runFallback, pendingSwitchIsCurrent(pendingSwitch) { pendingSwitch.onFallback() }
+    }
+
+    func cancelWindowDeparture() {
+        preview?.cancelWindowDeparture()
+    }
+
+    func supersedeUncommittedSwitch(reason: String) {
+        cancelPendingSwitch(reason: reason, runFallback: false)
+        if let flight, !flight.committing { cancel(reason: reason) }
+    }
+
+    private func startPendingSwitchIfReady(id: UUID) {
+        guard let pendingSwitch, pendingSwitch.id == id else { return }
+        guard pendingSwitchIsCurrent(pendingSwitch), let controller, let refreshController else {
+            cancelPendingSwitch(reason: "switch-invalidated")
+            return
+        }
+        guard pendingSwitchParticipantsAreCurrent(pendingSwitch) else {
+            fallbackPendingSwitch(id: id, reason: "switch-participants-changed")
+            return
+        }
+        let flight = pendingSwitch.flight
+        let preview = previewSurface(controller)
+        guard preview.hasPreviews(
+            source: flight.preparation.source.items,
+            destination: flight.destination.items,
+            monitor: flight.preparation.monitor,
+            workingFrame: flight.preparation.frame
+        ) else {
+            if !preview.hasPendingCaptures { fallbackPendingSwitch(id: id, reason: "capture-unavailable") }
+            return
+        }
+        guard preview.begin(
+            source: flight.preparation.source.items,
+            destination: flight.destination.items,
+            monitor: flight.preparation.monitor,
+            workingFrame: flight.preparation.frame
+        ) else {
+            fallbackPendingSwitch(id: id, reason: "preview-unavailable")
+            return
+        }
+
+        self.pendingSwitch = nil
+        pendingSwitchTimeout?.cancel()
+        pendingSwitchTimeout = nil
+        refreshController.stopScrollAnimation(for: flight.preparation.monitor.displayId)
+        refreshController.stopDwindleAnimation(for: flight.preparation.monitor.displayId)
+        let timestamp = mediaTimeProvider()
+        guard flight.motion.settle(to: 1, timestamp: timestamp, animationTime: timestamp),
+              let link = refreshController.getOrCreateDisplayLink(for: flight.preparation.monitor.displayId)
+        else {
+            preview.stop()
+            refreshController.stopDisplayLinkIfIdle(for: flight.preparation.monitor.displayId)
+            pendingSwitch.onFallback()
+            return
+        }
+        flight.phase = .settling
+        self.flight = flight
+        trace("programmatic-began")
+        controller.surfaceReconciler.reconcileNow()
+        link.add(to: .main, forMode: .common)
+    }
+
+    private func fallbackPendingSwitch(id: UUID, reason: String) {
+        guard let pendingSwitch, pendingSwitch.id == id else { return }
+        self.pendingSwitch = nil
+        pendingSwitchTimeout?.cancel()
+        pendingSwitchTimeout = nil
+        preview?.stop()
+        trace(reason)
+        guard pendingSwitchIsCurrent(pendingSwitch) else { return }
+        pendingSwitch.onFallback()
+    }
+
+    private func pendingSwitchIsCurrent(_ pending: PendingSwitch) -> Bool {
+        guard let controller,
+              controller.intentLedger.newestFocusIntentId() == pending.focusIntentId,
+              !controller.isOverviewOpen(),
+              let monitor = controller.workspaceManager.monitor(byId: pending.flight.preparation.monitor.id),
+              monitor.frame == pending.flight.preparation.monitor.frame,
+              monitor.visibleFrame == pending.flight.preparation.monitor.visibleFrame,
+              controller.workspaceManager.activeWorkspaceOrFirst(on: monitor.id)?.id
+              == pending.flight.preparation.source.id,
+              controller.workspaceManager.monitor(for: pending.flight.destination.id)?.id == monitor.id
+        else { return false }
+        return true
+    }
+
+    private func pendingSwitchParticipantsAreCurrent(_ pending: PendingSwitch) -> Bool {
+        guard let controller else { return false }
+        for workspace in [pending.flight.preparation.source, pending.flight.destination] {
+            let currentEntries = controller.workspaceManager.entries(in: workspace.id).filter {
+                !controller.workspaceManager.isAppHidden(pid: $0.pid)
+            }
+            guard currentEntries.allSatisfy({ $0.layoutReason == .standard }) else { return false }
+            for item in workspace.items {
+                guard item.handle.token == item.token,
+                      let entry = controller.workspaceManager.entry(for: item.handle),
+                      entry.workspaceId == workspace.id, entry.layoutReason == .standard,
+                      !controller.workspaceManager.isAppHidden(pid: entry.pid)
+                else { return false }
+            }
+        }
+        return true
+    }
+
     func cancel(reason: String) {
+        cancelPendingSwitch(reason: reason, runFallback: false)
         guard let flight else {
             stopPreparing()
             return
@@ -269,9 +456,11 @@ final class WorkspaceSwipePresentation {
             cancel(reason: "commit-failed")
             return
         }
+        flight.onActivated()
         trace("committed", progress: flight.progress)
         controller.workspaceNavigationHandler.commitWorkspaceTransitionFocusHandoff(
             targetWorkspaceId: flight.destination.id, monitor: flight.preparation.monitor, startScrollAnimation: false,
+            affectedWorkspaces: flight.affectedWorkspaces,
             placementSubmitted: { [weak self, weak flight] in
                 guard let self, let flight, self.flight === flight else { return }
                 didSubmitPlacement()
@@ -288,8 +477,12 @@ final class WorkspaceSwipePresentation {
 
 extension WorkspaceSwipePresentation {
     func previewSurface(_ controller: WMController) -> WorkspaceSwipePreview {
-        if let preview { return preview }
+        if let preview {
+            preview.onDepartureFinished = { [weak self] in self?.warmPreviews() }
+            return preview
+        }
         let preview = WorkspaceSwipePreview(ownedWindowRegistry: controller.ownedWindowRegistry)
+        preview.onDepartureFinished = { [weak self] in self?.warmPreviews() }
         self.preview = preview
         return preview
     }

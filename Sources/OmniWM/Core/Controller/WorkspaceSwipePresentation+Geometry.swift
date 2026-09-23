@@ -5,22 +5,81 @@ import AppKit
 
 extension WorkspaceSwipePresentation {
     func warmPreviews() {
-        guard flight == nil, preparation == nil,
-              let controller, controller.hasStartedServices,
-              controller.motionPolicy.animationsEnabled, controller.settings.gestures.workspaceSwipeEnabled,
+        guard flight == nil, pendingSwitch == nil, preparation == nil,
+              let controller, controller.hasStartedServices, controller.motionPolicy.animationsEnabled,
               !controller.isOverviewOpen(),
-              let monitor = controller.monitorForInteraction(),
-              let preparation = makePreparation(monitorId: monitor.id)
+              let monitor = controller.monitorForInteraction()
         else { return }
-        previewSurface(controller).warm(
-            source: preparation.source.items,
-            destination: (preparation.previous?.items ?? []) + (preparation.next?.items ?? []),
-            monitor: preparation.monitor,
-            workingFrame: preparation.frame
+        let preview = previewSurface(controller)
+        if controller.settings.gestures.workspaceSwipeEnabled,
+           let preparation = makePreparation(monitorId: monitor.id)
+        {
+            preview.warm(
+                source: preparation.source.items,
+                destination: (preparation.previous?.items ?? []) + (preparation.next?.items ?? []),
+                monitor: preparation.monitor,
+                workingFrame: preparation.frame
+            )
+            return
+        }
+        guard let token = controller.workspaceManager.selectedManagedToken,
+              let entry = controller.workspaceManager.entry(for: token),
+              let handle = controller.workspaceManager.handle(for: token),
+              let frame = controller.liveFrame(for: entry)
+        else { return }
+        preview.warm(
+            source: [.init(handle: handle, frame: frame)],
+            destination: [],
+            monitor: monitor,
+            workingFrame: monitor.visibleFrame
+        )
+    }
+
+    func animateWindowDeparture(
+        _ handle: WindowHandle,
+        from sourceWorkspaceId: WorkspaceDescriptor.ID,
+        to targetWorkspaceId: WorkspaceDescriptor.ID
+    ) -> Bool {
+        guard flight == nil, pendingSwitch == nil,
+              let controller,
+              controller.motionPolicy.animationsEnabled,
+              let sourceMonitor = controller.workspaceManager.monitorForWorkspace(sourceWorkspaceId),
+              let targetMonitor = controller.workspaceManager.monitorForWorkspace(targetWorkspaceId),
+              let entry = controller.workspaceManager.entry(for: handle),
+              entry.workspaceId == sourceWorkspaceId,
+              let frame = controller.liveFrame(for: entry)
+        else { return false }
+
+        let offset: CGVector
+        if sourceMonitor.id == targetMonitor.id {
+            let ordered = controller.workspaceManager.workspaces(on: sourceMonitor.id)
+            let sourceIndex = ordered.firstIndex(where: { $0.id == sourceWorkspaceId }) ?? 0
+            let targetIndex = ordered.firstIndex(where: { $0.id == targetWorkspaceId }) ?? sourceIndex
+            let direction: CGFloat = targetIndex >= sourceIndex ? 1 : -1
+            offset = CGVector(dx: 0, dy: direction * sourceMonitor.visibleFrame.height * 1.1)
+        } else {
+            let deltaX = targetMonitor.frame.center.x - sourceMonitor.frame.center.x
+            let deltaY = targetMonitor.frame.center.y - sourceMonitor.frame.center.y
+            if abs(deltaX) >= abs(deltaY) {
+                offset = CGVector(dx: (deltaX < 0 ? -1 : 1) * sourceMonitor.visibleFrame.width * 1.1, dy: 0)
+            } else {
+                offset = CGVector(dx: 0, dy: (deltaY < 0 ? -1 : 1) * sourceMonitor.visibleFrame.height * 1.1)
+            }
+        }
+        return previewSurface(controller).beginWindowDeparture(
+            item: .init(handle: handle, frame: frame),
+            monitor: sourceMonitor,
+            offset: offset
         )
     }
 
     func handleInvalidation(workspaceId: WorkspaceDescriptor.ID?, domains: InvalidationDomain) {
+        if let pendingSwitch, !domains.isDisjoint(with: .layoutCommit),
+           workspaceId == nil || workspaceId == pendingSwitch.flight.preparation.source.id
+           || workspaceId == pendingSwitch.flight.destination.id
+        {
+            cancelPendingSwitch(reason: "switch-world-invalidated", runFallback: true)
+        }
         guard let flight else { return }
         if flight.committing {
             if !participantsAreCurrent(flight) { cancel(reason: "commit-superseded") }
@@ -47,7 +106,27 @@ extension WorkspaceSwipePresentation {
             frame: monitor.visibleFrame,
             source: source,
             previous: previous,
-            next: next
+            next: next,
+            requestedDestination: nil
+        )
+    }
+
+    func makePreparation(monitorId: Monitor.ID, destinationWorkspaceId: WorkspaceDescriptor.ID) -> Preparation? {
+        guard let controller,
+              let monitor = controller.workspaceManager.monitor(byId: monitorId),
+              controller.workspaceManager.monitorForWorkspace(destinationWorkspaceId)?.id == monitorId,
+              let current = controller.workspaceManager.activeWorkspaceOrFirst(on: monitorId),
+              current.id != destinationWorkspaceId,
+              let source = makeWorkspace(current.id, monitor: monitor, active: true),
+              let destination = makeWorkspace(destinationWorkspaceId, monitor: monitor, active: false)
+        else { return nil }
+        return Preparation(
+            monitor: monitor,
+            frame: monitor.visibleFrame,
+            source: source,
+            previous: nil,
+            next: nil,
+            requestedDestination: destination
         )
     }
 

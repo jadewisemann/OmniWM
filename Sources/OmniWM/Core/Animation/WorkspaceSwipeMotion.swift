@@ -85,6 +85,22 @@ final class WorkspaceSwipeMotion {
     }
 
     @discardableResult
+    func settle(to destination: Double, timestamp: TimeInterval, animationTime: TimeInterval) -> Bool {
+        guard spring == nil, timestamp.isFinite, timestamp >= lastTimestamp,
+              animationTime.isFinite, (0 ... 1).contains(destination) else { return false }
+        target = destination
+        lastTimestamp = timestamp
+        spring = SpringAnimation(
+            from: trackedProgress,
+            to: destination,
+            initialVelocity: 0,
+            startTime: animationTime,
+            config: Self.springConfig
+        )
+        return true
+    }
+
+    @discardableResult
     func catchMotion(cumulativeUnits: Double, timestamp: TimeInterval, animationTime: TimeInterval) -> Bool {
         guard accepts(cumulativeUnits: cumulativeUnits, timestamp: timestamp),
               animationTime.isFinite else { return false }
