@@ -301,6 +301,19 @@ final class OverviewStructuralCommandTests: XCTestCase {
         XCTAssertEqual(overview.selectedWindowHandle, selected)
         XCTAssertEqual(fixture.controller.workspaceManager.selectedManagedToken, liveFocused.id)
         XCTAssertEqual(fixture.focusRecorder.callCount, 0)
+
+        let wrappedOutcome = withBlockedLayoutRefreshes(fixture) {
+            overview.executeStructuralHotkey(
+                .workspace(.moveToNextMonitor),
+                selectedHandle: selected
+            )
+        }
+        let wrappedMutation = try XCTUnwrap(wrappedOutcome?.mutation)
+        XCTAssertEqual(wrappedMutation.sourceWorkspaceId, activeTargetWorkspaceId)
+        XCTAssertEqual(wrappedMutation.destinationWorkspaceId, sourceWorkspaceId)
+        XCTAssertEqual(fixture.controller.workspaceManager.workspace(for: selected.id), sourceWorkspaceId)
+        XCTAssertEqual(overview.selectedWindowHandle, selected)
+        XCTAssertEqual(fixture.focusRecorder.callCount, 0)
     }
 
     func testPhysicalStructuralRoutingBlocksTriggerlessAndUnsupportedCommands() throws {
@@ -354,6 +367,15 @@ final class OverviewStructuralCommandTests: XCTestCase {
             fixture.controller.commandHandler.handleHotkeyInvocation(
                 HotkeyInvocation(
                     command: .workspace(.moveToMonitor(.right)),
+                    trigger: PhysicalHotkeyTrigger(keyCode: 46, modifiers: 0, isRepeat: false)
+                )
+            ),
+            .executed
+        )
+        XCTAssertEqual(
+            fixture.controller.commandHandler.handleHotkeyInvocation(
+                HotkeyInvocation(
+                    command: .workspace(.moveToNextMonitor),
                     trigger: PhysicalHotkeyTrigger(keyCode: 46, modifiers: 0, isRepeat: false)
                 )
             ),

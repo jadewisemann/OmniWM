@@ -49,6 +49,8 @@ extension CommandHandler {
         switch action {
         case let .moveToMonitor(direction):
             controller.workspaceNavigationHandler.moveWindowToMonitor(direction: direction)
+        case .moveToNextMonitor:
+            controller.workspaceNavigationHandler.moveWindowToNextMonitor()
         case let .moveTo(index):
             controller.workspaceNavigationHandler.moveFocusedWindow(toWorkspaceIndex: index)
         case .moveUp:

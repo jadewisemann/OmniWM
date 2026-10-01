@@ -8,6 +8,7 @@ enum WorkspaceAction: Equatable, Hashable {
     case moveUp
     case moveDown
     case moveToMonitor(Direction)
+    case moveToNextMonitor
     case switchTo(Int)
     case switchSlot(Int)
     case moveToSlot(Int)
@@ -31,6 +32,7 @@ extension WorkspaceAction {
         case .next: "Switch to Next Workspace"
         case .previous: "Switch to Previous Workspace"
         case let .moveToMonitor(dir): "Move Window to \(dir.displayName) Monitor"
+        case .moveToNextMonitor: "Move Window to Next Monitor"
         case let .moveWorkspaceToMonitor(dir): "Move Workspace to \(dir.displayName) Monitor"
         case let .swapWithMonitor(dir): "Swap Workspace with \(dir.displayName) Monitor"
         case .backAndForth: "Switch to Last Active Workspace"
@@ -60,6 +62,8 @@ extension WorkspaceAction {
             .workspace(.moveDown)
         case .moveToMonitor:
             .workspace(.moveToMonitor)
+        case .moveToNextMonitor:
+            nil
         case .moveWorkspaceToMonitor:
             nil
         case .swapWithMonitor:
@@ -75,6 +79,7 @@ extension WorkspaceAction {
              .moveUp,
              .moveDown,
              .moveToMonitor,
+             .moveToNextMonitor,
              .switchTo,
              .switchSlot,
              .moveToSlot,

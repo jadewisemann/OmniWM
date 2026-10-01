@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 BarutSRB — https://github.com/OmniNull/OmniWM
 
+import Carbon
 @testable import OmniWM
 import OmniWMIPC
 import XCTest
@@ -103,5 +104,20 @@ final class WorkspaceMonitorHotkeyCommandTests: XCTestCase {
                 XCTAssertTrue(searchTerms.contains(term))
             }
         }
+    }
+
+    func testCyclicWindowMoveActionUsesOptionShiftP() throws {
+        let command = HotkeyCommand.workspace(.moveToNextMonitor)
+        let spec = try XCTUnwrap(ActionCatalog.spec(for: command))
+
+        XCTAssertEqual(spec.id, "moveWindowToMonitor.next")
+        XCTAssertEqual(spec.title, "Move Window to Next Monitor")
+        XCTAssertEqual(spec.category, .monitor)
+        XCTAssertEqual(spec.layoutCompatibility, .shared)
+        XCTAssertEqual(
+            spec.defaultBinding,
+            KeyBinding(keyCode: UInt32(kVK_ANSI_P), modifiers: UInt32(optionKey | shiftKey))
+        )
+        XCTAssertEqual(HotkeyBindingRegistry.command(for: spec.id), command)
     }
 }
