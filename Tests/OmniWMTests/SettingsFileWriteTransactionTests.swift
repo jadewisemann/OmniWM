@@ -90,7 +90,7 @@ final class SettingsFileWriteTransactionTests: XCTestCase {
         let original = try SettingsTOMLCodec.encode(.defaults())
         let fixture = try makeFixture(data: original)
         defer { fixture.remove() }
-        let expected = SettingsTOMLCodecError.unsupportedSchemaVersion(found: 4, supported: 3)
+        let expected = SettingsTOMLCodecError.unsupportedSchemaVersion(found: 5, supported: 4)
         var commitCount = 0
 
         let outcome = fixture.transaction().perform(.defaults()) { _ in

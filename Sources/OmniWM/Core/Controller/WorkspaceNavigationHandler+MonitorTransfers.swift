@@ -10,6 +10,29 @@ extension WorkspaceNavigationHandler {
         moveFocusedWindowToMonitor(direction: direction, focusPolicy: .configured)
     }
 
+    func moveWindowToNextMonitor() {
+        guard let controller,
+              let token = controller.workspaceManager.selectedManagedToken,
+              let sourceWorkspaceId = controller.workspaceManager.workspace(for: token)
+        else { return }
+
+        saveNiriViewportState(for: sourceWorkspaceId)
+        guard case let .changed(mutation) = moveWindowToNextMonitor(handle: WindowHandle(id: token))
+        else { return }
+        finishWorkspaceMove(mutation, focusPolicy: .alwaysFollow)
+    }
+
+    func moveWindowToNextMonitor(handle: WindowHandle) -> StructuralMutationOutcome {
+        guard let controller,
+              let sourceWorkspaceId = controller.workspaceManager.workspace(for: handle.id),
+              let sourceMonitorId = controller.workspaceManager.monitorId(for: sourceWorkspaceId),
+              let targetMonitor = controller.workspaceManager.nextMonitor(from: sourceMonitorId),
+              let targetWorkspace = controller.workspaceManager.activeWorkspaceOrFirst(on: targetMonitor.id)
+        else { return .unchanged }
+
+        return moveWindow(handle: handle, toWorkspaceId: targetWorkspace.id)
+    }
+
     func moveWindowAcrossMonitorAtEdge(direction: Direction) {
         moveFocusedWindowToMonitor(direction: direction, focusPolicy: .alwaysFollow)
     }

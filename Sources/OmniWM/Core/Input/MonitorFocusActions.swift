@@ -22,7 +22,7 @@ extension IPCMonitorFocusCommand {
             binding = .unassigned
         case .next:
             id = "focusMonitorNext"
-            binding = KeyBinding(keyCode: UInt32(kVK_Tab), modifiers: UInt32(controlKey | cmdKey))
+            binding = KeyBinding(keyCode: UInt32(kVK_ANSI_P), modifiers: UInt32(optionKey))
         case .last:
             id = "focusMonitorLast"
             binding = KeyBinding(keyCode: UInt32(kVK_ANSI_Grave), modifiers: UInt32(controlKey | cmdKey))

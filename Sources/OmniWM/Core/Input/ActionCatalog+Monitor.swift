@@ -54,6 +54,13 @@ extension ActionCatalog {
     static func appendWindowMonitorBindings(_ specs: inout [ActionSpec]) {
         specs.append(contentsOf: [
             action(
+                id: "moveWindowToMonitor.next",
+                command: .workspace(.moveToNextMonitor),
+                category: .monitor,
+                binding: KeyBinding(keyCode: UInt32(kVK_ANSI_P), modifiers: UInt32(optionKey | shiftKey)),
+                keywords: windowMonitorMoveKeywords
+            ),
+            action(
                 id: "moveWindowToMonitor.left",
                 command: .workspace(.moveToMonitor(.left)),
                 category: .monitor,

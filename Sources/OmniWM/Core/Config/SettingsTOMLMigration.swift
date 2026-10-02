@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 BarutSRB — https://github.com/OmniNull/OmniWM
 
+import Carbon
 import Foundation
 import TOML
 
@@ -59,13 +60,15 @@ enum SettingsTOMLMigration {
     static func migrate(_ raw: inout [String: TOMLNode], from version: Int) throws -> SettingsMigrationReport {
         let versionOneReport = version == 0 ? try migrateVersionZero(&raw) : nil
         let versionTwoAddedHotkeyIDs = version <= 1 ? migrateVersionOne(&raw) : []
-        let versionThreeDefaultedPaths = try migrateVersionTwo(&raw)
+        let versionThreeDefaultedPaths = version <= 2 ? try migrateVersionTwo(&raw) : []
+        let versionFourAddedHotkeyIDs = try migrateVersionThree(&raw)
         canonicalizeMigratedHotkeys(in: &raw)
         return SettingsMigrationReport(
             fromVersion: version,
             toVersion: SettingsTOMLCodec.currentSchemaVersion,
             defaultedPaths: (versionOneReport?.defaultedPaths ?? []) + versionThreeDefaultedPaths,
-            addedHotkeyIDs: (versionOneReport?.addedHotkeyIDs ?? []) + versionTwoAddedHotkeyIDs,
+            addedHotkeyIDs: (versionOneReport?.addedHotkeyIDs ?? [])
+                + versionTwoAddedHotkeyIDs + versionFourAddedHotkeyIDs,
             mappedHotkeys: versionOneReport?.mappedHotkeys ?? [],
             retiredHotkeys: versionOneReport?.retiredHotkeys ?? []
         )
@@ -247,6 +250,61 @@ enum SettingsTOMLMigration {
         )
         raw["schemaVersion"] = .integer(3)
         return added ? ["routing.arrangements"] : []
+    }
+
+    private static func migrateVersionThree(_ raw: inout [String: TOMLNode]) throws -> [String] {
+        defer { raw["schemaVersion"] = .integer(4) }
+        guard case var .array(entries) = raw["hotkeys"] else { return [] }
+
+        let previousHyper = HyperKeyModifiers(carbonMask: KeySymbolMapper.hyperModifiers) ?? .default
+        defer { KeySymbolMapper.setHyperKeyModifiers(previousHyper) }
+        if case let .table(general) = raw["general"],
+           case let .string(text) = general["hyperKeyModifiers"],
+           let configuredHyper = HyperKeyModifiers.fromHumanReadable(text)
+        {
+            KeySymbolMapper.setHyperKeyModifiers(configuredHyper)
+        }
+
+        let hotkeyData = try TOMLEncoder().encode(["hotkeys": TOMLNode.array(entries)])
+        let persisted = try TOMLDecoder().decode(PersistedHotkeyArray.self, from: hotkeyData).hotkeys
+        let oldFocus = KeyBinding(keyCode: UInt32(kVK_Tab), modifiers: UInt32(controlKey | cmdKey))
+        let nextFocus = KeyBinding(keyCode: UInt32(kVK_ANSI_P), modifiers: UInt32(optionKey))
+        let nextMove = KeyBinding(keyCode: UInt32(kVK_ANSI_P), modifiers: UInt32(optionKey | shiftKey))
+
+        let focusUsesOldDefault = persisted.contains {
+            $0.id == "focusMonitorNext" && $0.binding == .chord(oldFocus)
+        }
+        let focusChordOccupied = persisted.contains { hotkey in
+            guard hotkey.id != "focusMonitorNext", case let .chord(chord) = hotkey.binding else { return false }
+            return chord.conflicts(with: nextFocus)
+        }
+        if focusUsesOldDefault, !focusChordOccupied {
+            entries = entries.map { entry in
+                guard case .table(var table) = entry,
+                      table["id"] == .string("focusMonitorNext")
+                else { return entry }
+                table["binding"] = .string("Option+P")
+                return .table(table)
+            }
+        }
+
+        let nextMoveID = "moveWindowToMonitor.next"
+        let addedIDs: [String]
+        if entries.contains(where: { hotkeyID($0) == nextMoveID }) {
+            addedIDs = []
+        } else {
+            let moveChordOccupied = persisted.contains { hotkey in
+                guard case let .chord(chord) = hotkey.binding else { return false }
+                return chord.conflicts(with: nextMove)
+            }
+            entries.append(.table([
+                "binding": .string(moveChordOccupied ? "Unassigned" : "Option+Shift+P"),
+                "id": .string(nextMoveID)
+            ]))
+            addedIDs = [nextMoveID]
+        }
+        raw["hotkeys"] = .array(entries)
+        return addedIDs
     }
 
     private static func appendMissingUnassignedHotkeys(

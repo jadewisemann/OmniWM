@@ -742,15 +742,18 @@ Settings hides advanced actions from the shortcut list by default. Turn on `Incl
 
 | Action | Default Shortcut | Layout |
 |--------|------------------|--------|
-| Focus Next Monitor | `Control + Command + Tab` | `Shared` |
+| Focus Next Monitor | `Option + P` | `Shared` |
 | Focus Previous Monitor | `Unassigned` | `Shared` |
 | Focus Last Monitor | `` Control + Command + ` `` | `Shared` |
 | Move Workspace to Left / Right / Up / Down Monitor | `Unassigned` | `Shared` |
+| Move Window to Next Monitor | `Option + Shift + P` | `Shared` |
 | Move Window to Left / Right / Up / Down Monitor | `Unassigned` | `Shared` |
+
+**Focus Next Monitor** cycles focus through connected monitors. **Move Window to Next Monitor** cycles the focused window through them. Both wrap to the first monitor after the last and do nothing with only one connected monitor.
 
 The workspace-to-monitor actions target the active workspace and intentionally use the same temporary runtime override as `omniwmctl workspace move-to-monitor --force`. They do not rewrite the workspace's Home Monitor or swap workspaces, and unsafe fullscreen, hidden-app, scratchpad, or focus states still block the move.
 
-The window-to-monitor actions send the focused window directly to the current workspace on the adjacent routed display, independently of **Move Window Across Monitor at Edge**. The destination display must have at least one assigned workspace, which the Monitor Setup assistant verifies. They do not wrap when no monitor exists in that direction. **Follow Window to Monitor** controls whether focus follows the window; when it is off, you remain in the source workspace.
+The directional window-to-monitor actions send the focused window directly to the current workspace on the adjacent routed display, independently of **Move Window Across Monitor at Edge**. The destination display must have at least one assigned workspace, which the Monitor Setup assistant verifies. They do not wrap when no monitor exists in that direction. **Follow Window to Monitor** controls whether focus follows the window; when it is off, you remain in the source workspace.
 
 #### Layout
 

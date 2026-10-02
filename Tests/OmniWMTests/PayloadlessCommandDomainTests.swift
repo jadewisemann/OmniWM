@@ -59,7 +59,7 @@ final class PayloadlessCommandDomainTests: XCTestCase {
             command: .monitorFocus(.next),
             id: "focusMonitorNext",
             title: "Focus Next Monitor",
-            binding: KeyBinding(keyCode: UInt32(kVK_Tab), modifiers: UInt32(controlKey | cmdKey)),
+            binding: KeyBinding(keyCode: UInt32(kVK_ANSI_P), modifiers: UInt32(optionKey)),
             ipcName: .monitorFocus(.next)
         )
         XCTAssertEqual(ActionCatalog.spec(for: "focusMonitorNext")?.category, .monitor)
