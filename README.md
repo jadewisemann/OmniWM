@@ -2,13 +2,11 @@
 >
 > GitHub Actions packages an arm64 app ZIP after verification and tests succeed. The app archive, SHA-256 checksum, and source commit are available in the `omniwm-fork-app` artifact; publishing a GitHub Release is a separate step.
 
-## Using Pebble alongside the official app
+## OmniWM Pebble
 
-Install `OmniWM Pebble.app` beside `OmniWM.app`, then quit one before starting the other. The existing launch conflict check prevents both window managers from controlling the same desktop at once.
+The app is named `OmniWM Pebble.app` and uses the existing configuration at `~/.config/omniwm/settings.toml`, state at `~/.local/state/omniwm/`, and `omniwmctl` command. XDG config/state overrides still apply. The app keeps its fork schema and monitor shortcuts; it uses one settings file without an additional compatibility format.
 
-Pebble uses bundle ID `com.jadewisemann.OmniWM.Pebble`, shared settings in `~/.config/omniwm/`, state in `~/.local/state/omniwm-pebble/`, and its own IPC socket in `~/Library/Caches/com.jadewisemann.OmniWM.Pebble/`. XDG config/state overrides still apply. The optional CLI link is `omniwm-pebblectl`; the official `omniwmctl` is preserved. Both the bundled CLI and this link connect to Pebble by default.
-
-Both apps use the same `~/.config/omniwm/settings.toml`, so common settings follow you when switching apps. Pebble writes official-compatible schema 4 and stores its extra monitor-move shortcut under `pebble.hotkeys` in the same file; official v0.7.4 preserves that table. Earlier fork schema-5 files are backed up and converted to the shared format. Runtime state and permissions remain separate; Pebble requires its own Accessibility permission. Pebble's **Check for Updates** opens this fork's releases, and automatic official-app update checks are disabled for this bundle.
+The existing updater checks official OmniWM GitHub releases. When update checks are enabled, it checks on launch at most once per day; **Check for Updates** checks immediately. A newer official version can be detected and shown, but upstream changes still need to be incorporated into this fork before publishing a new Pebble build. Download Pebble builds from this fork's releases above.
 
 # OmniWM
 

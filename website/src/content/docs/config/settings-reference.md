@@ -10,7 +10,7 @@ This reference follows current `main`; features newer than the latest release ar
 Complete reference for `settings.toml`, in the file's canonical order. The authoritative schema is [`CanonicalTOMLConfig.swift`](https://github.com/OmniNull/OmniWM/blob/main/Sources/OmniWM/Core/Config/CanonicalTOMLConfig.swift); defaults come from [`SettingsExport.swift`](https://github.com/OmniNull/OmniWM/blob/main/Sources/OmniWM/Core/Config/SettingsExport.swift) and [`BuiltInSettingsDefaults.swift`](https://github.com/OmniNull/OmniWM/blob/main/Sources/OmniWM/Core/Config/BuiltInSettingsDefaults.swift).
 
 :::caution
-The current schema is strict — a missing required key in a version 4 shared file invalidates the whole file, `hotkeys` must list every required action exactly once (workspace `10+` entries are optional), and an enumerated string key must use one of its listed values (an unknown value rejects the whole file, exactly like a missing key). Conflicting trackpad gesture finger counts under [`gestures`](#gestures) reject the whole file too. Edit values in place; see [Configuration](/config/configuration/).
+The current schema is strict — a missing required key in a version 5 file invalidates the whole file, `hotkeys` must list every required action exactly once (workspace `10+` entries are optional), and an enumerated string key must use one of its listed values (an unknown value rejects the whole file, exactly like a missing key). Conflicting trackpad gesture finger counts under [`gestures`](#gestures) reject the whole file too. Edit values in place; see [Configuration](/config/configuration/).
 :::
 
 **Conventions**
@@ -24,12 +24,12 @@ The current schema is strict — a missing required key in a version 4 shared fi
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `schemaVersion` | integer | `4` (Pebble shared config) | Version of the complete `settings.toml` schema. This top-level key appears before the first table. Pebble stores its extra hotkey in `pebble.hotkeys`, keeping the file compatible with official v0.7.4. |
+| `schemaVersion` | integer | `5` (fork builds) | Version of the complete `settings.toml` schema. This top-level key appears before the first table. v0.7.4 writes `4`. |
 
 The canonical file declares:
 
 ```toml
-schemaVersion = 4
+schemaVersion = 5
 ```
 
 An absent version identifies a legacy version 0 file, while OmniWM v0.6.4 emitted version 1 and v0.7.4 emitted version 4. OmniWM upgrades version 0, 1, 2, 3, and 4 files sequentially in memory before strict version 5 validation, retaining the compatibility guarantee for settings emitted by v0.6.2 through v0.6.4. The version 2 to version 3 step moves the old flat routing rows into one saved arrangement; version 3 to version 4 adds the unassigned set/remove window-mark hotkey actions; and version 4 to version 5 adds the next-monitor window shortcut and updates the previous focus shortcut default (fork builds). A successful upgrade creates an exact write-once `settings.toml.pre-v5` or `settings.toml.pre-v5.1` backup, then atomically rewrites canonical TOML once; this can reorder keys and removes comments, while preserving unrecognized keys when their owner can be matched safely. Valid release migrations never use the `.corrupt` recovery slots. Older schema-less files are attempted but remain untouched with defaults active if they cannot validate, and files declaring a newer unsupported version remain untouched with configuration writes blocked. See [Automatic version upgrades](/config/configuration/#automatic-version-upgrades) for the migration rules and recovery behavior.

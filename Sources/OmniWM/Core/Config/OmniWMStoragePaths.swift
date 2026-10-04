@@ -21,22 +21,13 @@ struct OmniWMStoragePaths: Equatable {
         bundleIdentifier: String? = nil
     ) -> OmniWMStoragePaths {
         let homeDirectory = homeDirectory.standardizedFileURL
-        let directoryName: String
-        switch bundleIdentifier {
-        case "com.jadewisemann.OmniWM.Pebble":
-            directoryName = "omniwm-pebble"
-        case "com.barut.OmniWM.dev":
-            directoryName = "omniwm-dev"
-        default:
-            directoryName = "omniwm"
-        }
-        let configDirectoryName = bundleIdentifier == "com.barut.OmniWM.dev" ? "omniwm-dev" : "omniwm"
+        let directoryName = bundleIdentifier == "com.barut.OmniWM.dev" ? "omniwm-dev" : "omniwm"
         return OmniWMStoragePaths(
             configDirectory: directory(
                 environmentKey: "XDG_CONFIG_HOME",
                 fallbackBase: homeDirectory.appendingPathComponent(".config", isDirectory: true),
                 environment: environment,
-                directoryName: configDirectoryName
+                directoryName: directoryName
             ),
             stateDirectory: directory(
                 environmentKey: "XDG_STATE_HOME",
