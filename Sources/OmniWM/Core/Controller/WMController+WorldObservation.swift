@@ -7,6 +7,11 @@ import OmniWMIPC
 
 extension WMController {
     func handleSessionStateChanged(surfaceScope: SessionSurfaceInvalidationScope) {
+        if let source = columnModeToast.source,
+           workspaceManager.visibleWorkspaceId(on: source.monitorId) != source.workspaceId
+        {
+            columnModeToast.hide()
+        }
         switch surfaceScope {
         case .full:
             surfaceReconciler.noteWorldChanged()

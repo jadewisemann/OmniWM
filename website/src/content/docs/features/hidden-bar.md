@@ -10,6 +10,7 @@ sidebar:
 Hidden Bar conceals selected menu-bar icons and lets you reach them from a panel:
 
 - Pick the apps to hide in **Settings → Hidden Bar**.
+- Hidden Bar runs while the workspace bar is on; turning the bar off shows the hidden icons again.
 - Right-click (or Option-click) the OmniWM menu bar icon to open the Hidden Icons Bar; click an icon to reveal and use it.
 - Revealed icons re-hide automatically after a configurable interval — 5 seconds by default.
 - An optional global hotkey is available and starts unassigned.

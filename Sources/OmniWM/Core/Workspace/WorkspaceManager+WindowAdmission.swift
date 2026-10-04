@@ -17,6 +17,7 @@ extension WorkspaceManager {
         admissionHints: ManagedWindowAdmissionHints = .none,
         lifetimeAuthority: ManagedWindowLifetimeAuthority = .axTopLevelInventory,
         allowsNativeFocusAdoption: Bool = true,
+        isMinimized: Bool = false,
         managedReplacementMetadata: ManagedReplacementMetadata? = nil
     ) -> WindowToken {
         let token = WindowToken(pid: pid, windowId: windowId)
@@ -27,6 +28,7 @@ extension WorkspaceManager {
             return existingEntry.token
         }
         let adoptNativeFocus = allowsNativeFocusAdoption
+            && !isMinimized
             && windowQueries.entry(for: token) == nil
             && nativeFullscreenRecord(for: token) == nil
             && focusSessionSnapshot.pendingManagedFocus == .empty
@@ -54,6 +56,9 @@ extension WorkspaceManager {
                 source: .workspaceManager
             )
         )
+        if isMinimized {
+            setWindowMinimized(true, token: token, source: .workspaceManager)
+        }
         if let handle = windowQueries.handle(for: token) {
             onWindowPresenceObserved?(handle)
         }

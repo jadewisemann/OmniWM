@@ -200,6 +200,7 @@ extension NiriLayoutHandler {
 
         let area = WorkingAreaContext(
             workingFrame: pass.insetFrame,
+            singleWindowFrame: snapshot.monitor.workingFrame,
             borderSafeFillFrame: snapshot.monitor.borderSafeFillFrame,
             fullscreenLayoutFrame: snapshot.monitor.fullscreenLayoutFrame,
             viewFrame: snapshot.monitor.frame,

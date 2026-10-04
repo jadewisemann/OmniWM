@@ -8,6 +8,7 @@ final class HiddenBarObservation {
     private enum ObserverEvent: Sendable {
         case didBecomeActive
         case runningApplicationChanged(bundleID: String?, terminated: Bool)
+        case runningApplicationsChanged
         case applicationActivated
         case screenParametersChanged
     }
@@ -16,6 +17,8 @@ final class HiddenBarObservation {
     private var appLaunchObserver: NSObjectProtocol?
     private var appTerminationObserver: NSObjectProtocol?
     private var appActivationObserver: NSObjectProtocol?
+    private var runningApplicationsObservation: NSKeyValueObservation?
+    private var runningApplicationsRefreshQueued = false
     private var screenParametersObserver: NSObjectProtocol?
     private var topologyRefreshTask: Task<Void, Never>?
     private var topologyRefreshGeneration = 0
@@ -25,6 +28,7 @@ final class HiddenBarObservation {
     }
 
     var onTopologyRefreshForTests: (() -> Void)?
+    var onRunningApplicationsRefreshForTests: (() -> Void)?
     private static let topologyRefreshDelay: Duration = .milliseconds(150)
     private weak var controller: HiddenBarController?
 
@@ -34,7 +38,7 @@ final class HiddenBarObservation {
 
     func start() {
         if didBecomeActiveObserver == nil, appLaunchObserver == nil,
-           appTerminationObserver == nil, screenParametersObserver == nil
+           appTerminationObserver == nil, runningApplicationsObservation == nil, screenParametersObserver == nil
         {
             observerGeneration &+= 1
         }
@@ -102,6 +106,11 @@ final class HiddenBarObservation {
                 )
             }
         }
+        if runningApplicationsObservation == nil {
+            runningApplicationsObservation = NSWorkspace.shared.observe(\.runningApplications) { [weak self] _, _ in
+                self?.enqueueObserverEvent(.runningApplicationsChanged, generation: generation)
+            }
+        }
     }
 
     private func installApplicationActivationObserver(generation: Int) {
@@ -133,9 +142,11 @@ final class HiddenBarObservation {
             case .didBecomeActive:
                 controller.refreshAvailabilityAndItems()
             case .applicationActivated:
-                controller.refreshItems()
+                MainThreadAXSpanTrace.measure(.hiddenBarActivation) { controller.statusItems.syncFallbackIcon() }
             case let .runningApplicationChanged(bundleID, terminated):
                 controller.handleRunningApplicationChanged(bundleID: bundleID, terminated: terminated)
+            case .runningApplicationsChanged:
+                queueRunningApplicationsRefresh(generation: generation)
             case .screenParametersChanged:
                 guard controller.isConcealing else { return }
                 scheduleTopologyRefresh()
@@ -143,8 +154,30 @@ final class HiddenBarObservation {
         }
     }
 
+    private func queueRunningApplicationsRefresh(generation: Int) {
+        guard !runningApplicationsRefreshQueued else { return }
+        runningApplicationsRefreshQueued = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            runningApplicationsRefreshQueued = false
+            guard generation == observerGeneration, let controller else { return }
+            onRunningApplicationsRefreshForTests?()
+            MainThreadAXSpanTrace.measure(.hiddenBarRunningApps) {
+                controller.handleRunningApplicationChanged(bundleID: nil, terminated: false)
+            }
+        }
+    }
+
     func enqueueDidBecomeActiveForTests() {
         enqueueObserverEvent(.didBecomeActive, generation: observerGeneration)
+    }
+
+    func enqueueApplicationActivatedForTests() {
+        enqueueObserverEvent(.applicationActivated, generation: observerGeneration)
+    }
+
+    func enqueueRunningApplicationsChangedForTests() {
+        enqueueObserverEvent(.runningApplicationsChanged, generation: observerGeneration)
     }
 
     private func removeScreenParametersObserver() {
@@ -188,6 +221,8 @@ final class HiddenBarObservation {
             notificationCenter.removeObserver(appActivationObserver)
             self.appActivationObserver = nil
         }
+        runningApplicationsObservation?.invalidate()
+        runningApplicationsObservation = nil
     }
 
     var hasPendingTopologyRefreshForTests: Bool {
@@ -196,5 +231,9 @@ final class HiddenBarObservation {
 
     var hasScreenParametersObserverForTests: Bool {
         screenParametersObserver != nil
+    }
+
+    var hasRunningApplicationsObservationForTests: Bool {
+        runningApplicationsObservation != nil
     }
 }

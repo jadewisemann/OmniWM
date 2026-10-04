@@ -240,6 +240,28 @@ final class DwindleAdmissionRestoreStateTests: XCTestCase {
         XCTAssertEqual(second.engine.tileCount(in: second.workspaceId), 3)
     }
 
+    func testRestoredArrivalAfterFullscreenExitsFullscreen() throws {
+        let root = makeRoot()
+        let first = try makeSession(root: root)
+        _ = admit(index: 1, pidBase: 475_000, session: first)
+        _ = admit(index: 2, pidBase: 475_000, session: first)
+        runLayoutPass(first)
+        first.manager.flushPersistedWindowRestoreCatalogNow()
+
+        let second = try makeSession(root: root)
+        let restoredFirst = admit(index: 1, pidBase: 476_000, session: second)
+        runLayoutPass(second)
+        second.manager.withEngineMutationScope {
+            XCTAssertEqual(second.engine.toggleFullscreen(in: second.workspaceId), restoredFirst)
+        }
+        runLayoutPass(second)
+
+        let restoredSecond = admit(index: 2, pidBase: 476_000, session: second)
+        XCTAssertNotNil(second.manager.restoreIntent(for: restoredSecond)?.dwindlePlacement)
+        runLayoutPass(second)
+        XCTAssertTrue(second.engine.fullscreenTokens(in: second.workspaceId).isEmpty)
+    }
+
     private func step(
         _ orientation: DwindleOrientation,
         _ ratio: CGFloat,

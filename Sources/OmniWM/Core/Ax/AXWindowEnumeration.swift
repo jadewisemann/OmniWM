@@ -37,6 +37,7 @@ struct AXEnumeratedWindow: Sendable {
     let subrole: String?
     let admissionGeometry: WindowAdmissionGeometryEvidence
     let fullscreenAttribute: Bool?
+    let minimizedAttribute: Bool?
     let decisionEvidence: AXWindowDecisionEvidence
 
     init(
@@ -46,6 +47,7 @@ struct AXEnumeratedWindow: Sendable {
         subrole: String?,
         admissionGeometry: WindowAdmissionGeometryEvidence,
         fullscreenAttribute: Bool? = nil,
+        minimizedAttribute: Bool? = nil,
         decisionEvidence: AXWindowDecisionEvidence? = nil
     ) {
         self.axRef = axRef
@@ -54,6 +56,7 @@ struct AXEnumeratedWindow: Sendable {
         self.subrole = subrole
         self.admissionGeometry = admissionGeometry
         self.fullscreenAttribute = fullscreenAttribute
+        self.minimizedAttribute = minimizedAttribute
         self.decisionEvidence = decisionEvidence ?? .unavailable(role: role, subrole: subrole)
     }
 }
@@ -89,6 +92,10 @@ struct FullRescanWindowCandidate: Sendable {
 
     var isManageable: Bool {
         enumeratedWindow.admissionGeometry.isManageable
+    }
+
+    var minimizedAttribute: Bool? {
+        enumeratedWindow.minimizedAttribute
     }
 
     var capturedFrame: CGRect? {
@@ -161,7 +168,8 @@ enum AXWindowEnumerationInspector {
         "AXMinSize",
         "AXMaxSize",
         kAXMainAttribute as String,
-        kAXModalAttribute as String
+        kAXModalAttribute as String,
+        kAXMinimizedAttribute as String
     ]
 
     static func enumerateApplication(
@@ -293,6 +301,7 @@ enum AXWindowEnumerationInspector {
             subrole: subrole,
             admissionGeometry: geometry,
             fullscreenAttribute: value(at: 4, in: resolvedValues) as? Bool,
+            minimizedAttribute: value(at: 14, in: resolvedValues) as? Bool,
             decisionEvidence: evidence
         )
     }
@@ -362,7 +371,7 @@ enum AXWindowEnumerationInspector {
             AXWindowFactAttributeValues(
                 role: value(at: 0, in: values) as? String,
                 subrole: value(at: 1, in: values) as? String,
-                title: context.inspection.includeTitle ? value(at: 14, in: values) as? String : nil,
+                title: context.inspection.includeTitle ? value(at: 15, in: values) as? String : nil,
                 closeButton: value(at: 5, in: values),
                 fullscreenButton: fullscreenButtonValue,
                 fullscreenButtonEnabled: fullscreenButtonState.enabled,

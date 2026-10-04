@@ -15,7 +15,7 @@ extension NiriLayoutEngine {
         let time = context.time
         let canonicalRect = resolvedSingleWindowRect(
             for: single,
-            in: layoutArea.workingFrame,
+            in: layoutArea.singleWindowFrame,
             borderSafeFillFrame: layoutArea.borderSafeFillFrame,
             fullscreenLayoutFrame: layoutArea.fullscreenLayoutFrame,
             scale: layoutArea.scale,

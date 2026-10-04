@@ -57,11 +57,15 @@ final class OverviewPreviewTestDriver {
     func makeCapture(
         environment: OverviewEnvironment = OverviewEnvironment(),
         ownedWindowRegistry: OwnedWindowRegistry = OwnedWindowRegistry(),
+        consumer: OverviewFrameTrace.PreviewConsumer = .overview,
+        traceRecorder: OverviewFrameTrace.Recorder = OverviewFrameTrace.shared,
         maximumRetainedBytes: Int = 128 * 1_024 * 1_024
     ) -> OverviewThumbnailCapture {
         OverviewThumbnailCapture(
             environment: environment,
             ownedWindowRegistry: ownedWindowRegistry,
+            consumer: consumer,
+            traceRecorder: traceRecorder,
             hasCaptureAccess: { true },
             maximumRetainedBytes: maximumRetainedBytes,
             streamFactory: { [self] request, output in

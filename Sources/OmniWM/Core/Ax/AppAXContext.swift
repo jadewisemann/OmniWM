@@ -118,16 +118,26 @@ final class AppAXContext {
     func enqueueRetryRaise(
         _ window: AXWindowRef,
         job: RunLoopJob,
+        awaitingSubmittedFocus: @escaping @Sendable () -> Void,
         completion: @escaping @MainActor @Sendable () -> Void
     ) -> Bool {
         guard let thread, !job.isCancelled else { return false }
         cancelRetryRaise()
         pendingRetryRaise = PendingRetryRaise(window: window, job: job, completion: completion)
         let frameWriteSuppression = frameDelivery.retryRaiseSuppression
+        let pid = pid
+        let postedNs = WindowFocusDispatchTrace.retryRaise.isActive ? DispatchTime.now().uptimeNanoseconds : 0
         thread.runInLoopAsync(job: job) { [weak self, windows, frameWriteSuppression] job in
-            _ = Self.performRetryRaise(
-                window, windows: windows, suppression: frameWriteSuppression, job: job
-            )
+            WindowFocusDispatchTrace
+                .traceRetryRaise(pid: pid, windowId: window.windowId, postedNs: postedNs) { waited in
+                    Self.performRetryRaise(
+                        window, windows: windows, suppression: frameWriteSuppression, job: job,
+                        awaitingSubmittedFocus: {
+                            awaitingSubmittedFocus()
+                            waited()
+                        }
+                    )
+                }
             scheduleOnMainRunLoop { [weak self] in
                 self?.finishRetryRaise(job: job)
             }
@@ -197,6 +207,13 @@ final class AppAXContext {
         }
     }
 
+    func setWindowMinimized(_ minimized: Bool, for windowId: Int) {
+        if minimized {
+            cancelRetryRaise(for: windowId)
+        }
+        frameDelivery.setWindowMinimized(minimized, for: windowId)
+    }
+
     func makeFrameDrainExecution(drainId: UInt64, lane: AppAXFrameLane) -> AppAXFrameDrainExecution {
         AppAXFrameDrainExecution(
             writer: frameDelivery.writer(
@@ -209,6 +226,11 @@ final class AppAXContext {
             ),
             axApp: axApp
         )
+    }
+
+    func prepareForStopRestoration() {
+        cancelRetryRaise()
+        frameDelivery.shutdown()
     }
 
     func destroy() {

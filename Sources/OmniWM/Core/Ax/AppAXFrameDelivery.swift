@@ -52,6 +52,13 @@ final class AppAXFrameDelivery {
         frameWriteSuppression.setHardSuppressed(hidden)
     }
 
+    func setWindowMinimized(_ minimized: Bool, for windowId: Int) {
+        cancelFrameJob(for: windowId)
+        cancelParkFrameJob(for: windowId)
+        closingFrameWriteGenerations.invalidate(for: windowId)
+        frameWriteSuppression.setHardSuppressed(minimized, for: windowId)
+    }
+
     func invalidateClosingFrames() {
         closingFrameWriteGenerations.invalidateAll()
     }
@@ -66,6 +73,7 @@ final class AppAXFrameDelivery {
         frameWriteGenerations.invalidateAndRemove(windowId)
         parkFrameWriteGenerations.invalidateAndRemove(windowId)
         frameWriteSuppression.remove(windowId)
+        frameWriteSuppression.setHardSuppressed(false, for: windowId)
     }
 
     func retainFrameState(only windowIds: Set<Int>) {
@@ -78,7 +86,7 @@ final class AppAXFrameDelivery {
         let requests = frames.map {
             AppAXClosingFrameWriteRequest(
                 target: $0,
-                generation: closingFrameWriteGenerations.nextGeneration(for: $0.animationId)
+                generation: closingFrameWriteGenerations.nextGeneration(for: $0.animationId, windowId: $0.windowId)
             )
         }
         return closingFrameMailbox.enqueue(requests)

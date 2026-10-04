@@ -53,6 +53,13 @@ enum SettingsTOMLMigration {
 
     static let hotkeyIDsAddedInVersionTwo = Set(versionTwoHotkeyIDs)
 
+    private static let versionFourHotkeyIDs = [
+        "setWindowMark",
+        "removeWindowMark"
+    ]
+
+    static let hotkeyIDsAddedInVersionFour = Set(versionFourHotkeyIDs)
+
     private struct PersistedHotkeyArray: Decodable {
         let hotkeys: [PersistedHotkeyBinding]
     }
@@ -61,14 +68,15 @@ enum SettingsTOMLMigration {
         let versionOneReport = version == 0 ? try migrateVersionZero(&raw) : nil
         let versionTwoAddedHotkeyIDs = version <= 1 ? migrateVersionOne(&raw) : []
         let versionThreeDefaultedPaths = version <= 2 ? try migrateVersionTwo(&raw) : []
-        let versionFourAddedHotkeyIDs = try migrateVersionThree(&raw)
+        let versionFourAddedHotkeyIDs = version <= 3 ? migrateVersionThree(&raw) : []
+        let versionFiveAddedHotkeyIDs = version <= 4 ? try migrateVersionFour(&raw) : []
         canonicalizeMigratedHotkeys(in: &raw)
         return SettingsMigrationReport(
             fromVersion: version,
             toVersion: SettingsTOMLCodec.currentSchemaVersion,
             defaultedPaths: (versionOneReport?.defaultedPaths ?? []) + versionThreeDefaultedPaths,
-            addedHotkeyIDs: (versionOneReport?.addedHotkeyIDs ?? [])
-                + versionTwoAddedHotkeyIDs + versionFourAddedHotkeyIDs,
+            addedHotkeyIDs: (versionOneReport?.addedHotkeyIDs ?? []) + versionTwoAddedHotkeyIDs
+                + versionFourAddedHotkeyIDs + versionFiveAddedHotkeyIDs,
             mappedHotkeys: versionOneReport?.mappedHotkeys ?? [],
             retiredHotkeys: versionOneReport?.retiredHotkeys ?? []
         )
@@ -252,9 +260,19 @@ enum SettingsTOMLMigration {
         return added ? ["routing.arrangements"] : []
     }
 
-    private static func migrateVersionThree(_ raw: inout [String: TOMLNode]) throws -> [String] {
+    private static func migrateVersionThree(_ raw: inout [String: TOMLNode]) -> [String] {
         defer { raw["schemaVersion"] = .integer(4) }
         guard case var .array(entries) = raw["hotkeys"] else { return [] }
+
+        let addedIDs = appendMissingUnassignedHotkeys(versionFourHotkeyIDs, to: &entries)
+        raw["hotkeys"] = .array(entries)
+        return addedIDs
+    }
+
+    private static func migrateVersionFour(_ raw: inout [String: TOMLNode]) throws -> [String] {
+        defer { raw["schemaVersion"] = .integer(5) }
+        guard case var .array(entries) = raw["hotkeys"] else { return [] }
+        var addedIDs = appendMissingUnassignedHotkeys(versionFourHotkeyIDs, to: &entries)
 
         let previousHyper = HyperKeyModifiers(carbonMask: KeySymbolMapper.hyperModifiers) ?? .default
         defer { KeySymbolMapper.setHyperKeyModifiers(previousHyper) }
@@ -289,10 +307,7 @@ enum SettingsTOMLMigration {
         }
 
         let nextMoveID = "moveWindowToMonitor.next"
-        let addedIDs: [String]
-        if entries.contains(where: { hotkeyID($0) == nextMoveID }) {
-            addedIDs = []
-        } else {
+        if !entries.contains(where: { hotkeyID($0) == nextMoveID }) {
             let moveChordOccupied = persisted.contains { hotkey in
                 guard case let .chord(chord) = hotkey.binding else { return false }
                 return chord.conflicts(with: nextMove)
@@ -301,7 +316,7 @@ enum SettingsTOMLMigration {
                 "binding": .string(moveChordOccupied ? "Unassigned" : "Option+Shift+P"),
                 "id": .string(nextMoveID)
             ]))
-            addedIDs = [nextMoveID]
+            addedIDs.append(nextMoveID)
         }
         raw["hotkeys"] = .array(entries)
         return addedIDs

@@ -34,7 +34,7 @@ extension NiriLayoutEngine {
 
             let widthBounds = projectedWidthBounds(for: column, workspaceId: resize.workspaceId)
             let minWidth = widthBounds.min
-            let viewportMaxWidth = monitorFrame.width - gaps.horizontal
+            let viewportMaxWidth = monitorFrame.width - 2 * gaps.horizontal
             let maxWidth = max(
                 minWidth,
                 min(viewportMaxWidth, widthBounds.max ?? viewportMaxWidth)
@@ -114,7 +114,7 @@ extension NiriLayoutEngine {
             case let .fixedPixels(originalWidth):
                 let constraints = windowNode.constraints.normalized()
                 let minWidth = constraints.minSize.width
-                let viewportMaxWidth = monitorFrame.width - gaps.horizontal
+                let viewportMaxWidth = monitorFrame.width - 2 * gaps.horizontal
                 let constrainedMaxWidth = constraints.hasMaxWidth
                     ? constraints.maxSize.width
                     : viewportMaxWidth
@@ -164,7 +164,7 @@ extension NiriLayoutEngine {
 
             let heightBounds = projectedHeightBounds(for: column, workspaceId: resize.workspaceId)
             let minHeight = heightBounds.min
-            let viewportMaxHeight = monitorFrame.height - gaps.vertical
+            let viewportMaxHeight = monitorFrame.height - 2 * gaps.vertical
             let maxHeight = max(
                 minHeight,
                 min(viewportMaxHeight, heightBounds.max ?? viewportMaxHeight)

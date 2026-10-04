@@ -11,6 +11,56 @@ import XCTest
 
 @MainActor
 final class OverviewStructuralCommandTests: XCTestCase {
+    func testEmptiedDynamicWorkspaceSurvivesOverviewUntilClose() async throws {
+        let fixture = try makeFixture(layouts: [.niri])
+        let controller = fixture.controller
+        let manager = controller.workspaceManager
+        let configuredId = fixture.workspaceIds[0]
+        defer {
+            controller.windowActionHandler.invalidateOverviewDeferredActionsForServiceStop()
+        }
+        let dynamicId = try await emptyDynamicWorkspaceInOverview(fixture)
+
+        controller.motionPolicy.animationsEnabled = true
+        controller.windowActionHandler.dismissOverview()
+        guard case .closing = controller.windowActionHandler.overviewState else {
+            return XCTFail("Expected Overview to retain its closing presentation")
+        }
+        controller.layoutRefreshController.collectUnusedWorkspacesIfIdle()
+        XCTAssertNotNil(manager.descriptor(for: dynamicId))
+
+        controller.windowActionHandler.invalidateOverviewDeferredActionsForServiceStop()
+
+        XCTAssertFalse(controller.isOverviewOpen())
+        while let task = controller.layoutRefreshController.layoutState.activeRefreshTask { await task.value }
+        XCTAssertNil(manager.descriptor(for: dynamicId))
+        XCTAssertNotNil(manager.descriptor(for: configuredId))
+    }
+
+    func testEmptiedDynamicWorkspaceIsCollectedWhenOverviewClosesWithoutRefresh() async throws {
+        let fixture = try makeFixture(layouts: [.niri])
+        let controller = fixture.controller
+        let manager = controller.workspaceManager
+        let configuredId = fixture.workspaceIds[0]
+        defer {
+            controller.windowActionHandler.invalidateOverviewDeferredActionsForServiceStop()
+        }
+        let dynamicId = try await emptyDynamicWorkspaceInOverview(fixture)
+        let refresh = controller.layoutRefreshController
+        XCTAssertNil(refresh.layoutState.activeRefreshTask)
+        XCTAssertNil(refresh.layoutState.activeRefresh)
+        XCTAssertNil(refresh.layoutState.pendingRefresh)
+
+        controller.windowActionHandler.invalidateOverviewDeferredActionsForServiceStop()
+
+        XCTAssertFalse(controller.isOverviewOpen())
+        XCTAssertNil(refresh.layoutState.activeRefreshTask)
+        XCTAssertNil(refresh.layoutState.activeRefresh)
+        XCTAssertNil(refresh.layoutState.pendingRefresh)
+        XCTAssertNil(manager.descriptor(for: dynamicId))
+        XCTAssertNotNil(manager.descriptor(for: configuredId))
+    }
+
     func testOverviewGuardExemptsOnlyToggleOverview() {
         XCTAssertFalse(CommandHandler.shouldIgnoreCommand(.presentation(.overview), isOverviewOpen: true))
         XCTAssertTrue(CommandHandler.shouldIgnoreCommand(.column(.moveToFirst), isOverviewOpen: true))
@@ -1389,6 +1439,37 @@ final class OverviewStructuralCommandTests: XCTestCase {
                 accuracy: 0.001
             )
         }
+    }
+
+    private func emptyDynamicWorkspaceInOverview(_ fixture: Fixture) async throws -> WorkspaceDescriptor.ID {
+        let controller = fixture.controller
+        let manager = controller.workspaceManager
+        let configuredId = fixture.workspaceIds[0]
+        let dynamic = try XCTUnwrap(manager.createDynamicWorkspace(named: "2", on: fixture.monitor.id))
+        controller.syncMonitorsToNiriEngine()
+        let moved = try addManagedWindow(pid: 461_050, windowId: 50, to: dynamic.id, fixture: fixture)
+        XCTAssertTrue(manager.setActiveWorkspace(dynamic.id, on: fixture.monitor.id))
+        XCTAssertTrue(manager.setManagedFocus(moved.id, in: dynamic.id, onMonitor: fixture.monitor.id))
+        controller.toggleOverview()
+        XCTAssertTrue(controller.isOverviewOpen())
+
+        XCTAssertEqual(
+            controller.commandHandler.handleHotkeyInvocation(
+                HotkeyInvocation(
+                    command: .workspace(.moveTo(0)),
+                    trigger: PhysicalHotkeyTrigger(keyCode: 18, modifiers: 0, isRepeat: false)
+                )
+            ),
+            .executed
+        )
+        while let task = controller.layoutRefreshController.layoutState.activeRefreshTask { await task.value }
+
+        XCTAssertEqual(manager.workspace(for: moved.id), configuredId)
+        XCTAssertEqual(manager.activeWorkspace(on: fixture.monitor.id)?.id, configuredId)
+        XCTAssertEqual(manager.windowQueries.windowCount(in: dynamic.id), 0)
+        XCTAssertNotNil(manager.descriptor(for: dynamic.id))
+        XCTAssertTrue(controller.isOverviewOpen())
+        return dynamic.id
     }
 
     private func makeFixture(layouts: [LayoutType]) throws -> Fixture {

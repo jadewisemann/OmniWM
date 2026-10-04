@@ -66,7 +66,7 @@ extension NiriLayoutHandler {
         guard let monitor = controller.workspaceManager.monitor(for: workspaceId) else { return }
         var state = controller.workspaceManager.niriViewportState(for: workspaceId)
         let motion = controller.motionPolicy.snapshot()
-        let workingFrame = controller.insetWorkingFrame(for: monitor)
+        let workingFrame = controller.niriWorkingFrame(for: monitor)
         let gaps = controller.innerGap(for: monitor)
         let orientation = controller.settings.monitors.effectiveOrientation(for: monitor)
         let context = NiriInteractionContext(
@@ -125,7 +125,7 @@ extension NiriLayoutHandler {
     ) -> Bool {
         guard let anchor,
               let nodeId = anchor.nodeId,
-              !controller.workspaceManager.isAppHidden(anchor.token),
+              !controller.workspaceManager.isWindowSuppressedByMacOS(anchor.token),
               let target = engine.findMostRecentlyFocusedWindow(excluding: nodeId, in: nil),
               let targetWorkspaceId = controller.workspaceManager.entry(for: target.token)?.workspaceId,
               targetWorkspaceId != anchor.workspaceId
@@ -157,7 +157,7 @@ extension NiriLayoutHandler {
 
         if let observedToken,
            let entry = controller.workspaceManager.entry(for: observedToken),
-           !controller.workspaceManager.isAppHidden(pid: entry.pid)
+           !controller.workspaceManager.isWindowSuppressedByMacOS(entry.token)
         {
             return FocusHistoryAnchor(
                 workspaceId: entry.workspaceId,
@@ -169,7 +169,7 @@ extension NiriLayoutHandler {
 
         if let token = controller.workspaceManager.selectedManagedToken,
            let entry = controller.workspaceManager.entry(for: token),
-           !controller.workspaceManager.isAppHidden(pid: entry.pid)
+           !controller.workspaceManager.isWindowSuppressedByMacOS(entry.token)
         {
             return FocusHistoryAnchor(
                 workspaceId: entry.workspaceId,

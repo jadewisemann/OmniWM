@@ -24,39 +24,7 @@ enum EventNormalizer {
             normalizeVisibility(event, existingEntry: existingEntry)
         case let .topologyChanged(displays, source): normalizedTopology(displays, source: source)
         case let .focusLeaseChanged(lease, source): normalizedFocusLease(lease, source: source)
-        case .activeSpaceChanged,
-             .appVisibilityInvalidated,
-             .floatingStateChanged,
-             .focusFallbackRemembered,
-             .focusForgotten,
-             .focusRemembered,
-             .hiddenApplicationsChanged,
-             .interactionMonitorChanged,
-             .layoutOperationPerformed,
-             .managedFocusCancelled,
-             .managedFocusConfirmed,
-             .managedFocusRequested,
-             .nativeFocusOwnerChanged,
-             .manualLayoutOverrideChanged,
-             .windowAdmissionHintsChanged,
-             .nativeFullscreenPlaceholderSelected,
-             .niriPlacementsResolved,
-             .dwindlePlacementsResolved,
-             .scratchpadMembershipChanged,
-             .scratchpadRevealChanged,
-             .selectionChanged,
-             .spaceTopologyChanged,
-             .suppressedFocusChanged,
-             .systemModalFocusChanged,
-             .systemSleep,
-             .systemWake,
-             .topLevelInventoryObserved,
-             .userCommand,
-             .viewportChanged,
-             .viewportCommitted,
-             .viewportForgotten,
-             .visibleWorkspacesChanged,
-             .workspaceFocusCleared:
+        default:
             event
         }
     }

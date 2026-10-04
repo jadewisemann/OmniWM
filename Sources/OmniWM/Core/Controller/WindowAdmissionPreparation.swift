@@ -12,6 +12,7 @@ extension AXEventHandler {
         let ruleEffects: ManagedWindowRuleEffects
         let admissionHints: ManagedWindowAdmissionHints
         let appFullscreen: Bool
+        var isMinimized = false
         let replacementMetadata: ManagedReplacementMetadata
         let structuralReplacementMatch: StructuralReplacementMatch?
 

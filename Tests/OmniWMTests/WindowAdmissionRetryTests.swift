@@ -25,19 +25,21 @@ private final class FocusedFactReadGate {
 
 @MainActor
 final class WindowAdmissionRetryTests: XCTestCase {
-    func testMissingWindowInfoRetryRecordsTypedReason() {
+    func testMissingWindowInfoRetryRecordsTypedReason() async {
         let controller = WindowAdmissionTestSupport.controller()
         let windowId: UInt32 = 467_201
         controller.axEventHandler.windowInfoProvider = { _ in nil }
 
         controller.axEventHandler.handleCGSEvent(.created(windowId: windowId, spaceId: 0))
+        await controller.axEventHandler.lifecycleQueries.task?.value
 
         let trace = controller.axEventHandler.createFocusTraceDump()
         XCTAssertTrue(trace.contains("window=\(windowId) pid=nil reason=window_info_missing attempt=1"))
         controller.axEventHandler.handleCGSEvent(.destroyed(windowId: windowId, spaceId: 0))
+        await controller.axEventHandler.lifecycleQueries.task?.value
     }
 
-    func testRetryExhaustionSurvivesPIDAliasUntilAXIncarnationChanges() {
+    func testRetryExhaustionSurvivesPIDAliasUntilAXIncarnationChanges() async {
         let controller = WindowAdmissionTestSupport.controller()
         let windowId: UInt32 = 467_403
         let firstToken = WindowToken(pid: 467_303, windowId: Int(windowId))
@@ -83,9 +85,10 @@ final class WindowAdmissionRetryTests: XCTestCase {
         )
         XCTAssertEqual(controller.axEventHandler.admissionRetryStateByWindowId[windowId]?.attempt, 1)
         controller.axEventHandler.handleCGSEvent(.destroyed(windowId: windowId, spaceId: 0))
+        await controller.axEventHandler.lifecycleQueries.task?.value
     }
 
-    func testCreateRetryCannotReplaceConcreteCandidateTrigger() throws {
+    func testCreateRetryCannotReplaceConcreteCandidateTrigger() async throws {
         let controller = WindowAdmissionTestSupport.controller()
         let windowId: UInt32 = 467_405
         let token = WindowToken(pid: 467_305, windowId: Int(windowId))
@@ -118,6 +121,7 @@ final class WindowAdmissionRetryTests: XCTestCase {
         XCTAssertEqual(triggerToken, token)
         XCTAssertTrue(CFEqual(triggerAXRef.element, axRef.element))
         controller.axEventHandler.handleCGSEvent(.destroyed(windowId: windowId, spaceId: 0))
+        await controller.axEventHandler.lifecycleQueries.task?.value
     }
 
     func testDeferredDiscoveryCandidateRetainsRetryTriggerWhenDrained() async throws {
@@ -148,12 +152,14 @@ final class WindowAdmissionRetryTests: XCTestCase {
             fallbackToken: token,
             fallbackAXRef: axRef,
             placementOrigin: .discovery,
-            retryTrigger: runningState.trigger
+            retryTrigger: runningState.trigger,
+            retryExecution: .init(windowId: windowId, generation: runningState.generation, executionOwner: 701)
         )
         controller.layoutRefreshController.layoutState.activeFullEnumerationCount = 0
         controller.axEventHandler.windowInfoProvider = { _ in nil }
 
         controller.axEventHandler.drainDeferredCreatedWindows()
+        await controller.axEventHandler.lifecycleQueries.task?.value
 
         let rescheduled = try XCTUnwrap(
             controller.axEventHandler.admissionRetryStateByWindowId[windowId]
@@ -169,7 +175,7 @@ final class WindowAdmissionRetryTests: XCTestCase {
         controller.axEventHandler.cancelCreatedWindowRetry(windowId: windowId)
     }
 
-    func testCandidateRetryCannotReplaceFocusedRetrySemantics() throws {
+    func testCandidateRetryCannotReplaceFocusedRetrySemantics() async throws {
         let controller = WindowAdmissionTestSupport.controller()
         let windowId: UInt32 = 467_406
         let token = WindowToken(pid: 467_306, windowId: Int(windowId))
@@ -206,6 +212,7 @@ final class WindowAdmissionRetryTests: XCTestCase {
         XCTAssertEqual(source, .focusedWindowChanged)
         XCTAssertEqual(observationGeneration, 7)
         controller.axEventHandler.handleCGSEvent(.destroyed(windowId: windowId, spaceId: 0))
+        await controller.axEventHandler.lifecycleQueries.task?.value
     }
 
     func testSuccessfulLowerPriorityAdmissionConsumesFocusedRetry() throws {

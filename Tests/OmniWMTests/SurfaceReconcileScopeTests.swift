@@ -114,6 +114,18 @@ final class SurfaceReconcileScopeTests: XCTestCase {
         XCTAssertEqual(reconciler.pendingReconcileScope, .borderOnly)
     }
 
+    func testDisabledBorderRemovesDisplayScaleObserver() {
+        let controller = WindowAdmissionTestSupport.controller(prefix: "SurfaceReconcileScopeTests")
+        let reconciler = controller.surfaceReconciler
+        controller.settings.borders.enabled = false
+        controller.borderSettingsChanged()
+        reconciler.reconcileNow()
+
+        NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
+
+        XCTAssertNil(reconciler.pendingReconcileScope)
+    }
+
     func testAnimationTickDoesNotConsumePendingFullScenePass() {
         let controller = WindowAdmissionTestSupport.controller(prefix: "SurfaceReconcileScopeTests")
         let reconciler = controller.surfaceReconciler

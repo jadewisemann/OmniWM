@@ -61,7 +61,7 @@ extension DwindleLayoutEngine {
         guard !placedTokens.isEmpty,
               !placedTokenSet.subtracting(currentTokens).isEmpty,
               currentTokens.isSubset(of: placedTokenSet),
-              let restoredRoot = buildRestoredTree(from: placedTokens, previousLeaves: state.leafByToken)
+              let restoredRoot = buildRestoredTree(from: placedTokens)
         else { return false }
 
         if interactiveResize?.workspaceId == workspaceId {
@@ -92,10 +92,7 @@ extension DwindleLayoutEngine {
         return true
     }
 
-    private func buildRestoredTree(
-        from placedTokens: [PlacedToken],
-        previousLeaves: [WindowToken: DwindleNode]
-    ) -> DwindleNode? {
+    private func buildRestoredTree(from placedTokens: [PlacedToken]) -> DwindleNode? {
         let scratchRoot = DwindleNode(kind: .leaf(tile: nil))
         var membersByLeaf: [DwindleNodeId: [PlacedToken]] = [:]
 
@@ -118,7 +115,7 @@ extension DwindleLayoutEngine {
         }
 
         guard pruneEmptyLeaves(in: scratchRoot, membersByLeaf: &membersByLeaf) else { return nil }
-        materializeTiles(in: scratchRoot, membersByLeaf: membersByLeaf, previousLeaves: previousLeaves)
+        materializeTiles(in: scratchRoot, membersByLeaf: membersByLeaf)
         return scratchRoot
     }
 
@@ -152,12 +149,11 @@ extension DwindleLayoutEngine {
 
     private func materializeTiles(
         in node: DwindleNode,
-        membersByLeaf: [DwindleNodeId: [PlacedToken]],
-        previousLeaves: [WindowToken: DwindleNode]
+        membersByLeaf: [DwindleNodeId: [PlacedToken]]
     ) {
         guard node.isLeaf else {
             for child in node.children {
-                materializeTiles(in: child, membersByLeaf: membersByLeaf, previousLeaves: previousLeaves)
+                materializeTiles(in: child, membersByLeaf: membersByLeaf)
             }
             return
         }
@@ -169,13 +165,9 @@ extension DwindleLayoutEngine {
         }
         guard let first = members.first else { return }
 
-        func wasFullscreen(_ token: WindowToken) -> Bool {
-            previousLeaves[token]?.tile?.member(for: token)?.isFullscreen == true
-        }
-
-        let tile = DwindleTile(token: first.token, fullscreen: wasFullscreen(first.token))
+        let tile = DwindleTile(token: first.token)
         for member in members.dropFirst() {
-            tile.insertAfterActive(DwindleTileMember(token: member.token, isFullscreen: wasFullscreen(member.token)))
+            tile.insertAfterActive(DwindleTileMember(token: member.token, isFullscreen: false))
         }
         let activeToken = members.first(where: \.placement.isActiveMember)?.token ?? first.token
         tile.activate(activeToken)

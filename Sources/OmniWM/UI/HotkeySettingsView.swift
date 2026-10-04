@@ -29,7 +29,7 @@ enum HotkeyCaptureResult {
                 ConflictAlert(
                     targetActionId: actionId,
                     newTrigger: newTrigger,
-                    conflictingCommands: conflicts.map(\.command.displayName)
+                    conflictingCommands: conflicts.map(\.command.localizedDisplayName)
                 )
             )
         }
@@ -58,70 +58,73 @@ enum HotkeyInputMonitoringStatus: Equatable {
     var displayText: String {
         switch self {
         case .granted:
-            "Granted"
+            String(localized: "Granted")
         case .denied:
-            "Denied"
+            String(localized: "Denied")
         }
     }
 }
 
 enum HotkeySettingsDisplayModel {
-    static func isVisible(bindingId: String, showsAdvancedHotkeys: Bool) -> Bool {
-        switch ActionCatalog.visibility(for: bindingId) ?? .normal {
-        case .normal:
-            true
-        case .advanced:
-            showsAdvancedHotkeys
-        case .unassignable:
-            false
+    private static let unassignedText = String(localized: "Unassigned")
+    struct Group: Identifiable {
+        let category: HotkeyCategory
+        let bindings: [HotkeyBinding]
+
+        var id: HotkeyCategory {
+            category
         }
     }
 
-    static func matchesSearch(_ query: String, binding: HotkeyBinding) -> Bool {
+    static func search(_ query: String, bindings: [HotkeyBinding]) -> [Group] {
         let normalizedQuery = ActionCatalog.normalizedSearchTerm(query)
-        guard !normalizedQuery.isEmpty else { return true }
-        let actionTerms = ActionCatalog.spec(for: binding.id)?.searchTerms ?? [
-            binding.command.displayName,
-            binding.command.layoutCompatibility.rawValue
-        ]
-        let searchTerms = actionTerms + [
-            displayString(for: binding.binding),
-            humanReadableString(for: binding.binding)
-        ]
-        return searchTerms.contains {
-            ActionCatalog.normalizedSearchTerm($0).contains(normalizedQuery)
+        var bindingsByCategory: [HotkeyCategory: [HotkeyBinding]] = [:]
+        for binding in bindings {
+            guard ActionCatalog.visibility(for: binding.id) != .unassignable,
+                  matchesSearch(normalizedQuery, binding: binding)
+            else { continue }
+            bindingsByCategory[binding.category, default: []].append(binding)
+        }
+        return HotkeyCategory.allCases.compactMap { category in
+            bindingsByCategory[category].map { Group(category: category, bindings: $0) }
         }
     }
 
-    static func advancedSearchMatchCount(_ query: String, bindings: [HotkeyBinding]) -> Int {
-        guard !ActionCatalog.normalizedSearchTerm(query).isEmpty else { return 0 }
-        return bindings.count { binding in
-            ActionCatalog.visibility(for: binding.id) == .advanced
-                && matchesSearch(query, binding: binding)
+    private static func matchesSearch(_ normalizedQuery: String, binding: HotkeyBinding) -> Bool {
+        guard !normalizedQuery.isEmpty else { return true }
+        if let terms = ActionCatalog.normalizedSearchTerms(for: binding.id) {
+            if terms.contains(where: { $0.contains(normalizedQuery) }) { return true }
+        } else if ActionCatalog.normalizedSearchTerm(binding.command.displayName).contains(normalizedQuery)
+            || ActionCatalog.normalizedSearchTerm(binding.command.layoutCompatibility.rawValue)
+            .contains(normalizedQuery)
+        {
+            return true
         }
+        return ActionCatalog.normalizedSearchTerm(displayString(for: binding.binding)).contains(normalizedQuery)
+            || ActionCatalog.normalizedSearchTerm(humanReadableString(for: binding.binding)).contains(normalizedQuery)
     }
 
     static func displayString(for binding: KeyBinding) -> String {
-        binding.displayString
+        binding.isUnassigned ? unassignedText : binding.displayString
     }
 
     static func displayString(for trigger: HotkeyTrigger) -> String {
         switch trigger {
         case .unassigned:
-            return "Unassigned"
+            return unassignedText
         case let .chord(binding):
             return displayString(for: binding)
         }
     }
 
     static func humanReadableString(for binding: KeyBinding) -> String {
-        binding.humanReadableString
+        binding.isUnassigned ? unassignedText : binding.humanReadableString
     }
 
     static func humanReadableString(for trigger: HotkeyTrigger) -> String {
         switch trigger {
         case .unassigned:
-            return "Unassigned"
+            return unassignedText
         case let .chord(binding):
             return humanReadableString(for: binding)
         }
@@ -143,15 +146,17 @@ struct HotkeySettingsView: View {
     @State private var conflictAlert: ConflictAlert?
     @State private var hyperTriggerError: String?
     @State private var searchText: String = ""
-    @State private var showsAdvancedHotkeys = false
     @State private var confirmsResetToDefaults = false
     @State private var inputMonitoringStatus = HotkeyInputMonitoringStatus(
         granted: HotkeyCenter.inputMonitoringAccessGranted()
     )
 
     var body: some View {
-        SettingsPage(
-            subtitle: "Search commands, edit shortcuts, and review registration problems without leaving the settings window."
+        let groups = HotkeySettingsDisplayModel.search(searchText, bindings: settings.hotkeyBindings)
+        HotkeySettingsPage(
+            subtitle: String(
+                localized: "Search commands, edit shortcuts, and review registration problems without leaving the settings window."
+            )
         ) {
             Section("Controls") {
                 LabeledContent("System Hyper Trigger") {
@@ -179,26 +184,24 @@ struct HotkeySettingsView: View {
                 if let triggerFailure = controller.systemHyperTriggerFailure {
                     SettingsCaption(systemHyperTriggerFailureMessage(triggerFailure))
                 }
-                SettingsCaption(
-                    "Hold this key or button to act as \(settings.hyperKeyModifiers.symbolsString) (Hyper). "
-                        + "Needs Input Monitoring permission. "
-                        + "Leave as None to use a Hyper key set up elsewhere, such as Karabiner."
+                SettingsCaption(localized:
+                    "Hold this key or button to act as \(settings.hyperKeyModifiers.symbolsString) (Hyper). Needs Input Monitoring permission. Leave as None to use a Hyper key set up elsewhere, such as Karabiner."
                 )
 
                 LabeledContent("Hyper Key Modifiers") {
                     HStack(spacing: 12) {
-                        hyperModifierToggle("⌃ Control", flag: UInt32(controlKey))
-                        hyperModifierToggle("⌥ Option", flag: UInt32(optionKey))
-                        hyperModifierToggle("⇧ Shift", flag: UInt32(shiftKey))
-                        hyperModifierToggle("⌘ Command", flag: UInt32(cmdKey))
+                        hyperModifierToggle(String(localized: "⌃ Control"), flag: UInt32(controlKey))
+                        hyperModifierToggle(String(localized: "⌥ Option"), flag: UInt32(optionKey))
+                        hyperModifierToggle(String(localized: "⇧ Shift"), flag: UInt32(shiftKey))
+                        hyperModifierToggle(String(localized: "⌘ Command"), flag: UInt32(cmdKey))
                     }
+                    .fixedSize()
                     .onChange(of: settings.hyperKeyModifiers) { _, _ in
                         controller.updateHotkeyBindings(settings.hotkeyBindings, force: true)
                     }
                 }
-                SettingsCaption(
-                    "Modifiers that make up the Hyper chord. Unchecked modifiers stay free to combine "
-                        + "with Hyper in shortcuts, such as Hyper+Shift when Shift is excluded."
+                SettingsCaption(localized:
+                    "Modifiers that make up the Hyper chord. Unchecked modifiers stay free to combine with Hyper in shortcuts, such as Hyper+Shift when Shift is excluded."
                 )
 
                 LabeledContent("Input Monitoring") {
@@ -239,46 +242,29 @@ struct HotkeySettingsView: View {
                     }
                 }
 
-                Toggle("Include Advanced Commands", isOn: $showsAdvancedHotkeys)
-                    .toggleStyle(.switch)
-                SettingsCaption("Includes advanced commands in the shortcut list and search results.")
-
-                let hiddenAdvancedMatchCount = hiddenAdvancedSearchMatchCount
-                if hiddenAdvancedMatchCount > 0 {
-                    HStack(spacing: 12) {
-                        Text(hiddenAdvancedSearchMessage(for: hiddenAdvancedMatchCount))
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Button("Show Advanced Commands") {
-                            showsAdvancedHotkeys = true
-                        }
-                    }
-                } else if !hasSearchMatches {
+                if groups.isEmpty {
                     Text("No matching hotkeys.")
                         .foregroundStyle(.secondary)
                 }
             }
 
-            ForEach(HotkeyCategory.allCases, id: \.self) { category in
-                let actions = actionsForCategory(category)
-                if !actions.isEmpty {
-                    Section(category.rawValue) {
-                        ForEach(actions) { binding in
-                            HotkeyBindingRow(
-                                binding: binding,
-                                recordingTarget: $recordingTarget,
-                                failureReason: controller.hotkeyRegistrationFailures[binding.command],
-                                isHyperActive: {
-                                    controller.isHyperTriggerActive
-                                },
-                                onStartChordRecording: startChordRecording,
-                                onChordCaptured: handleChordCaptured,
-                                onCancelRecording: cancelRecording,
-                                onClearBinding: clearBinding,
-                                onResetBindings: resetBindings,
-                                onSetSide: setSide
-                            )
-                        }
+            ForEach(groups) { group in
+                Section(group.category.localizedDisplayName) {
+                    ForEach(group.bindings) { binding in
+                        HotkeyBindingRow(
+                            binding: binding,
+                            recordingTarget: $recordingTarget,
+                            failureReason: controller.hotkeyRegistrationFailures[binding.command],
+                            isHyperActive: {
+                                controller.isHyperTriggerActive
+                            },
+                            onStartChordRecording: startChordRecording,
+                            onChordCaptured: handleChordCaptured,
+                            onCancelRecording: cancelRecording,
+                            onClearBinding: clearBinding,
+                            onResetBindings: resetBindings,
+                            onSetSide: setSide
+                        )
                     }
                 }
             }
@@ -322,44 +308,6 @@ struct HotkeySettingsView: View {
         }
     }
 
-    private var hasSearchMatches: Bool {
-        visibleHotkeyBindings.contains {
-            HotkeySettingsDisplayModel.matchesSearch(searchText, binding: $0)
-        }
-    }
-
-    private var visibleHotkeyBindings: [HotkeyBinding] {
-        settings.hotkeyBindings.filter(isVisible)
-    }
-
-    private var hiddenAdvancedSearchMatchCount: Int {
-        guard !showsAdvancedHotkeys else { return 0 }
-        return HotkeySettingsDisplayModel.advancedSearchMatchCount(
-            searchText,
-            bindings: settings.hotkeyBindings
-        )
-    }
-
-    private func actionsForCategory(_ category: HotkeyCategory) -> [HotkeyBinding] {
-        visibleHotkeyBindings.filter { binding in
-            binding.category == category && HotkeySettingsDisplayModel.matchesSearch(searchText, binding: binding)
-        }
-    }
-
-    private func isVisible(_ binding: HotkeyBinding) -> Bool {
-        HotkeySettingsDisplayModel.isVisible(
-            bindingId: binding.id,
-            showsAdvancedHotkeys: showsAdvancedHotkeys
-        )
-    }
-
-    private func hiddenAdvancedSearchMessage(for count: Int) -> String {
-        if count == 1 {
-            return "1 matching advanced command is hidden."
-        }
-        return "\(count) matching advanced commands are hidden."
-    }
-
     private var isRecordingOrDrafting: Bool {
         recordingTarget != nil
     }
@@ -386,9 +334,9 @@ struct HotkeySettingsView: View {
     private func systemHyperTriggerFailureMessage(_ failure: SystemHyperTriggerFailure) -> String {
         switch failure {
         case .eventTapUnavailable:
-            "System Hyper trigger is unavailable: grant Input Monitoring permission."
+            String(localized: "System Hyper trigger is unavailable: grant Input Monitoring permission.")
         case .capsLockRemapUnavailable:
-            "System Hyper trigger is unavailable: Caps Lock remapping failed."
+            String(localized: "System Hyper trigger is unavailable: Caps Lock remapping failed.")
         }
     }
 
@@ -492,9 +440,11 @@ struct ConflictAlert: Identifiable {
 
     var message: String {
         if conflictingCommands.count == 1 {
-            return "This key combination is already used by \"\(conflictingCommands[0])\". Do you want to replace it?"
+            return String(
+                localized: "This key combination is already used by \"\(conflictingCommands[0])\". Do you want to replace it?"
+            )
         }
         let commandList = conflictingCommands.joined(separator: ", ")
-        return "This key combination is used by: \(commandList). Do you want to replace all?"
+        return String(localized: "This key combination is used by: \(commandList). Do you want to replace all?")
     }
 }

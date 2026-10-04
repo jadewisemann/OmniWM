@@ -8,7 +8,7 @@ import XCTest
 
 @MainActor
 final class WindowAdmissionIdentityLifecycleTests: XCTestCase {
-    func testDuplicateCGSCreatePreservesPinnedHiddenScratchpad() throws {
+    func testDuplicateCGSCreatePreservesPinnedHiddenScratchpad() async throws {
         let controller = WindowAdmissionTestSupport.controller()
         let workspaceId = try XCTUnwrap(
             controller.workspaceManager.workspaceId(for: "1", createIfMissing: true)
@@ -36,6 +36,7 @@ final class WindowAdmissionIdentityLifecycleTests: XCTestCase {
         defer { AXWindowService.unpinAXElement(for: windowId) }
 
         controller.axEventHandler.handleCGSEvent(.created(windowId: windowId, spaceId: 0))
+        await controller.axEventHandler.lifecycleQueries.task?.value
 
         XCTAssertTrue(AXWindowService.hasPinnedAXElement(for: windowId))
         XCTAssertEqual(controller.workspaceManager.entry(forWindowId: Int(windowId))?.token, token)

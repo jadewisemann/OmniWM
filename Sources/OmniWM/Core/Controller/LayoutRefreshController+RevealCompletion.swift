@@ -192,7 +192,7 @@ extension LayoutRefreshController {
               let pendingTransaction = pendingRevealTransaction(for: windowId),
               pendingTransaction.id == transactionId,
               let entry = controller.workspaceManager.entry(for: pendingTransaction.token),
-              !controller.workspaceManager.isAppHidden(pid: entry.pid),
+              !controller.workspaceManager.isWindowSuppressedByMacOS(entry.token),
               let observedFrame = observedWindowFrame(entry)
         else {
             return nil

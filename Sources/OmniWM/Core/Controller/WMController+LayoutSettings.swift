@@ -30,6 +30,7 @@ extension WMController {
     }
 
     func updateMonitorGapSettings() {
+        workspaceManager.invalidateNiriCachedPrimarySpans()
         workspaceManager.invalidateAllLayouts()
         layoutRefreshController.requestRelayout(reason: .monitorSettingsChanged)
         publishDisplayChanged()

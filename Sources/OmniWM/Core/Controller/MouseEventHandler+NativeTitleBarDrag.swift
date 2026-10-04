@@ -207,6 +207,11 @@ extension MouseEventHandler {
         }
     }
 
+    func tracksNativeTitleBarDrag(windowId: Int) -> Bool {
+        state.nativeTitleBarDrag?.token.windowId == windowId
+            || state.nativeTitleBarDragFallbackToken?.windowId == windowId
+    }
+
     func discardNativeTitleBarDrag(for token: WindowToken) {
         guard state.nativeTitleBarDrag?.token == token
             || state.nativeTitleBarDragFallbackToken == token

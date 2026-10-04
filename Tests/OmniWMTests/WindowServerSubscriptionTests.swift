@@ -348,7 +348,10 @@ final class WindowServerSubscriptionTests: XCTestCase {
             )
         }
 
-        controller.axEventHandler.handleCGSEvent(.orderChanged(windowId: UInt32(tracked.windowId)))
+        controller.axEventHandler.applyWindowOrderChanged(
+            windowId: UInt32(tracked.windowId),
+            windowInfo: controller.axEventHandler.resolveWindowInfo(UInt32(tracked.windowId))
+        )
 
         XCTAssertNil(controller.surfaceReconciler.pendingReconcileScope)
         XCTAssertFalse(controller.surfaceReconciler.forceOrderingOnNextReconcile)
@@ -362,7 +365,10 @@ final class WindowServerSubscriptionTests: XCTestCase {
             )
         }
 
-        controller.axEventHandler.handleCGSEvent(.orderChanged(windowId: UInt32(tracked.windowId)))
+        controller.axEventHandler.applyWindowOrderChanged(
+            windowId: UInt32(tracked.windowId),
+            windowInfo: controller.axEventHandler.resolveWindowInfo(UInt32(tracked.windowId))
+        )
 
         XCTAssertEqual(controller.surfaceReconciler.pendingReconcileScope, .borderOnly)
         XCTAssertTrue(controller.surfaceReconciler.forceOrderingOnNextReconcile)

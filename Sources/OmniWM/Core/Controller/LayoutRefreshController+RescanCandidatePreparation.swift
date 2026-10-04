@@ -17,7 +17,7 @@ extension LayoutRefreshController {
         let winId = candidate.windowId
         let token = WindowToken(pid: pid, windowId: winId)
         progress.observedTopLevelInventoryTokens.insert(token)
-        let existingEntry: WindowState?
+        var existingEntry: WindowState?
         switch controller.axEventHandler.resolveFullRescanIdentity(
             axRef: ax,
             pid: pid,
@@ -34,6 +34,14 @@ extension LayoutRefreshController {
                 progress.affectedWorkspaceIds.insert(entry.workspaceId)
             }
             return nil
+        }
+        if let entry = existingEntry, let minimized = candidate.minimizedAttribute {
+            controller.axEventHandler.updateWindowMinimizedState(
+                minimized,
+                token: entry.token,
+                requestRefresh: false
+            )
+            existingEntry = controller.workspaceManager.entry(for: entry.token)
         }
         if let existingEntry {
             progress.affectedWorkspaceIds.insert(existingEntry.workspaceId)

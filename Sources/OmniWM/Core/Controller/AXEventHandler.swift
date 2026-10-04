@@ -41,7 +41,10 @@ final class AXEventHandler {
     private var nextManagedReplacementEventSequence: UInt64 = 0
     var visibleWindowInfoProvider: () -> [WindowServerInfo]
     var windowInfoProvider: (UInt32) -> WindowServerInfo?
-    var windowInfoBatchProvider: (Set<UInt32>) -> [UInt32: WindowServerInfo]?
+    var windowInfoBatchProvider: (Set<UInt32>) async throws -> [UInt32: WindowServerInfo]?
+    var createdWindowAXRefProvider: (WindowToken) async throws -> AXWindowRef? = lookupCreatedWindowIdentity
+    var frameObservations = FrameObservations()
+    var lifecycleQueries = LifecycleQueries()
     var windowSubscriptionProvider: ([UInt32]) -> Bool
     var preparedWindowSubscriptionRetainCounts: [UInt32: Int] = [:]
     var windowSubscriptionIdentityRevision: UInt64 = 0
@@ -75,8 +78,8 @@ final class AXEventHandler {
         windowInfoProvider: @escaping (UInt32) -> WindowServerInfo? = {
             SkyLight.shared.queryWindowInfo($0)
         },
-        windowInfoBatchProvider: @escaping (Set<UInt32>) -> [UInt32: WindowServerInfo]? = {
-            SkyLight.shared.queryWindowInfo(windowIds: $0)
+        windowInfoBatchProvider: @escaping (Set<UInt32>) async throws -> [UInt32: WindowServerInfo]? = {
+            try await SkyLight.shared.queryWindowInfoDeferred(windowIds: $0)
         },
         windowSubscriptionProvider: @escaping ([UInt32]) -> Bool = {
             CGSEventObserver.shared.subscribeToWindows($0)
@@ -91,6 +94,8 @@ final class AXEventHandler {
     }
 
     func cleanup() {
+        cancelLifecycleQueries()
+        cancelFrameObservations()
         resetCreatePlacementContextState()
         resetManagedReplacementState()
         endWindowCloseFocusRecovery(reason: "cleanup")
@@ -122,14 +127,11 @@ extension AXEventHandler {
     }
 
     func drainDeferredCreatedWindows(
-        spaceIdsForWindow: (UInt32) -> [UInt64] = { SkyLight.shared.spacesForWindow($0) }
+        spaceIdsForWindow: @escaping (UInt32) -> [UInt64] = { SkyLight.shared.spacesForWindow($0) }
     ) {
         guard !deferredCreatedWindowOrder.isEmpty else { return }
 
         let deferredWindowIds = deferredCreatedWindowOrder
-        deferredCreatedWindowOrder.removeAll()
-        deferredCreatedWindowIds.removeAll()
-
         for windowId in deferredWindowIds {
             guard let controller else { return }
             processDeferredCreatedWindow(windowId, controller: controller, spaceIdsForWindow: spaceIdsForWindow)
@@ -347,13 +349,9 @@ extension AXEventHandler {
         return candidate.structuralReplacementMatch?.source == .pendingDestroy
     }
 
-    func enqueueManagedReplacementCreate(_ candidate: PreparedCreate) {
-        enqueueManagedReplacementCreate(candidate, focusedActivation: nil)
-    }
-
     func enqueueManagedReplacementCreate(
         _ candidate: PreparedCreate,
-        focusedActivation: PendingFocusedManagedActivation?
+        focusedActivation: PendingFocusedManagedActivation? = nil
     ) {
         guard let policy = managedReplacementCorrelationPolicy(for: candidate.replacementMetadata) else { return }
         recordDeferredManagedReplacementCreate(candidate)

@@ -98,7 +98,7 @@ extension AXManager {
         let preservingPIDs = Set(selection.preservingPIDsByWindowId.values)
         return runningApplications.compactMap { pid, app in
             guard selection.includedPIDs?.contains(pid) ?? true,
-                  shouldTrack(app, pid: pid)
+                  Self.shouldTrack(app, pid: pid)
             else {
                 return nil
             }

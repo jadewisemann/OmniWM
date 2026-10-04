@@ -55,6 +55,7 @@ extension AXEventHandler {
         controller.workspaceManager.setSystemModalFocus(focusedWindow.isSystemModalSurface ? token : nil)
 
         if let entry = controller.workspaceManager.entry(for: token) {
+            guard !entry.observedState.isMinimized else { return }
             handleTrackedActivationFacts(
                 entry,
                 observation: observation,

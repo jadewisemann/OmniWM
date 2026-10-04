@@ -36,6 +36,64 @@ final class WorkspaceMoveFocusBehaviorTests: XCTestCase {
         let stacked: WindowHandle
     }
 
+    func testDynamicColumnWorkspaceIsCollectedAfterLeavingWithEitherFollowSetting() throws {
+        for followsFocus in [false, true] {
+            let fixture = try makeFixture(layouts: [.niri], followsFocus: followsFocus)
+            let controller = fixture.controller
+            let manager = controller.workspaceManager
+            let configuredId = fixture.workspaceIds[0]
+            let moved = try addManagedWindow(pid: 488_009, windowId: 91, to: configuredId, fixture: fixture)
+            try select(moved, in: configuredId, fixture: fixture)
+
+            try withBlockedLayoutRefreshes(fixture) {
+                controller.workspaceNavigationHandler.moveColumnToAdjacentWorkspace(direction: .down)
+                try completePendingRefresh(fixture)
+                let dynamicId = try XCTUnwrap(manager.workspaceId(named: "2"))
+                XCTAssertEqual(manager.workspace(for: moved.id), dynamicId)
+                XCTAssertNotNil(manager.descriptor(for: configuredId))
+
+                if !followsFocus {
+                    XCTAssertTrue(controller.workspaceNavigationHandler.switchWorkspace(rawWorkspaceID: "2"))
+                    try completePendingRefresh(fixture)
+                }
+                try select(moved, in: dynamicId, fixture: fixture)
+                controller.workspaceNavigationHandler.moveColumnToAdjacentWorkspace(direction: .up)
+                try completePendingRefresh(fixture)
+                XCTAssertEqual(manager.workspace(for: moved.id), configuredId)
+
+                if !followsFocus {
+                    XCTAssertNotNil(manager.descriptor(for: dynamicId))
+                    XCTAssertEqual(manager.activeWorkspace(on: fixture.monitor.id)?.id, dynamicId)
+                    XCTAssertTrue(controller.workspaceNavigationHandler.switchWorkspace(rawWorkspaceID: "1"))
+                    try completePendingRefresh(fixture)
+                }
+
+                XCTAssertNil(manager.descriptor(for: dynamicId))
+                XCTAssertEqual(manager.workspaces.map(\.id), [configuredId])
+                XCTAssertNil(manager.nextWorkspaceInOrder(on: fixture.monitor.id, from: configuredId, wrapAround: true))
+            }
+        }
+    }
+
+    func testLastWindowRetirementCollectsInvisibleDynamicWorkspace() throws {
+        let fixture = try makeFixture(layouts: [.niri], followsFocus: false)
+        let controller = fixture.controller
+        let manager = controller.workspaceManager
+        let dynamic = try XCTUnwrap(manager.createDynamicWorkspace(named: "2", on: fixture.monitor.id))
+        controller.syncMonitorsToNiriEngine()
+        let window = try addManagedWindow(pid: 488_009, windowId: 92, to: dynamic.id, fixture: fixture)
+
+        try withBlockedLayoutRefreshes(fixture) {
+            controller.axEventHandler.retireManagedWindow(
+                try XCTUnwrap(manager.entry(for: window)), reason: .authoritativeRescan
+            )
+            XCTAssertNotNil(manager.descriptor(for: dynamic.id))
+            try completePendingRefresh(fixture)
+            XCTAssertNil(manager.descriptor(for: dynamic.id))
+            XCTAssertEqual(manager.workspaces.map(\.id), fixture.workspaceIds)
+        }
+    }
+
     func testNiriAdjacentWindowMoveHonorsFollowSettingWithEmptySourceAndDynamicDestination() throws {
         for followsFocus in [false, true] {
             let fixture = try makeFixture(layouts: [.niri], followsFocus: followsFocus)
@@ -1180,6 +1238,22 @@ extension WorkspaceMoveFocusBehaviorTests {
         XCTAssertEqual(pending.reason, .workspaceTransition)
         XCTAssertEqual(pending.postLayoutActions.count, 1)
         return try XCTUnwrap(pending.postLayoutActions.first)
+    }
+
+    private func completePendingRefresh(_ fixture: Fixture) throws {
+        let refreshController = fixture.controller.layoutRefreshController
+        let refresh = try XCTUnwrap(refreshController.layoutState.pendingRefresh)
+        let blocker = refreshController.layoutState.activeRefreshTask
+        let blockedRefresh = refreshController.layoutState.activeRefresh
+        refreshController.layoutState.pendingRefresh = nil
+        refreshController.layoutState.activeRefresh = refresh
+        refreshController.finishRefresh(
+            refresh, didComplete: true, generation: refreshController.layoutState.refreshGeneration
+        )
+        XCTAssertNil(refreshController.layoutState.activeRefreshTask)
+        XCTAssertNil(refreshController.layoutState.activeRefresh)
+        refreshController.layoutState.activeRefreshTask = blocker
+        refreshController.layoutState.activeRefresh = blockedRefresh
     }
 
     private func withBlockedLayoutRefreshes<T>(

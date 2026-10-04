@@ -370,7 +370,8 @@ extension NiriLayoutHandler {
            removal.removalResult.removedColumnIndicesBefore.isEmpty,
            pass.engine.correctViewportAfterColumnRemoval(
                context: pass.interactionContext,
-               state: &state
+               state: &state,
+               preservesCenteredView: !removal.removedColumn
            )
         {
             viewportNeedsRecalc = true

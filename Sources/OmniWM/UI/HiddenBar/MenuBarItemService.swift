@@ -35,11 +35,16 @@ final class MenuBarItemService {
     private var scanThread: Thread?
     private var itemThread: Thread?
     private var activationThread: Thread?
-    private var stopped = false
+    private var stopped = true
     private var epoch = 0
     private let inFlightJobs = LockedRunLoopJobSet()
 
+    var isRunning: Bool {
+        !stopped
+    }
+
     func start() {
+        guard stopped else { return }
         stopped = false
         epoch += 1
     }
@@ -109,6 +114,7 @@ final class MenuBarItemService {
     }
 
     func stop() {
+        guard !stopped else { return }
         stopped = true
         inFlightJobs.cancelAll()
         let threads = [scanThread, itemThread, activationThread].compactMap { $0 }

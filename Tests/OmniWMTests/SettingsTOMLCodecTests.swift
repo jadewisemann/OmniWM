@@ -568,9 +568,9 @@ final class SettingsTOMLCodecTests: XCTestCase {
         var changes: [Bool] = []
         settings.onTrackpadGestureAvailabilityChanged = { changes.append($0) }
         settings.gestures.overviewGestureEnabled = true
-        XCTAssertTrue(settings.gestures.trackpadGesturesEnabled)
+        XCTAssertTrue(settings.effectiveTrackpadGesturesEnabled)
         settings.gestures.overviewGestureEnabled = false
-        XCTAssertFalse(settings.gestures.trackpadGesturesEnabled)
+        XCTAssertFalse(settings.effectiveTrackpadGesturesEnabled)
         XCTAssertEqual(changes, [true, false])
     }
 

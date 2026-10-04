@@ -127,6 +127,138 @@ final class OverviewSelectionUXTests: XCTestCase {
         XCTAssertEqual(fixture.projection.selection, .workspace(fixture.workspaceIds[2]))
     }
 
+    func testHideEmptyWorkspacesFiltersOverviewSectionsAndSelection() throws {
+        let fixture = try makeFixture(localWindowCount: 1, remoteWindowCount: 1)
+        let monitorId = fixture.monitors[0].id
+        let remoteMonitorId = fixture.monitors[1].id
+        let original = try XCTUnwrap(fixture.projection.layoutsByMonitor[monitorId])
+        XCTAssertEqual(original.workspaceSections.map(\.workspaceId), Array(fixture.workspaceIds.prefix(3)))
+        XCTAssertTrue(OverviewNavigation.selections(in: original, searching: false).contains(
+            .workspace(fixture.workspaceIds[1])
+        ))
+
+        fixture.projection.selection = .workspace(fixture.workspaceIds[1])
+        fixture.controller.settings.workspaceBar.hideEmptyWorkspaces = true
+        refreshWorkspaceSections(fixture)
+
+        let hidden = try XCTUnwrap(fixture.projection.layoutsByMonitor[monitorId])
+        XCTAssertEqual(hidden.workspaceSections.map(\.workspaceId), [fixture.workspaceIds[0]])
+        XCTAssertEqual(
+            fixture.projection.layoutsByMonitor[remoteMonitorId]?.workspaceSections.map(\.workspaceId),
+            [fixture.workspaceIds[3]]
+        )
+        XCTAssertEqual(fixture.projection.selection, .window(try XCTUnwrap(fixture.localHandles.first)))
+        XCTAssertEqual(
+            OverviewNavigation.selections(in: hidden, searching: false),
+            [.window(try XCTUnwrap(fixture.localHandles.first)), .newWorkspace(monitorId)]
+        )
+        XCTAssertEqual(hidden.newWorkspaceTarget?.monitorId, monitorId)
+
+        fixture.controller.settings.workspaceBar.hideEmptyWorkspaces = false
+        refreshWorkspaceSections(fixture)
+
+        let restored = try XCTUnwrap(fixture.projection.layoutsByMonitor[monitorId])
+        XCTAssertEqual(restored.workspaceSections.map(\.workspaceId), Array(fixture.workspaceIds.prefix(3)))
+        XCTAssertTrue(OverviewNavigation.selections(in: restored, searching: false).contains(
+            .workspace(fixture.workspaceIds[2])
+        ))
+    }
+
+    func testHideEmptyWorkspacesRetainsActiveEmptyWorkspace() throws {
+        let fixture = try makeFixture(localWindowCount: 1)
+        let manager = fixture.controller.workspaceManager
+        let monitorId = fixture.monitors[0].id
+        let emptyWorkspaceId = fixture.workspaceIds[1]
+        fixture.controller.settings.workspaceBar.hideEmptyWorkspaces = true
+        XCTAssertTrue(manager.setActiveWorkspace(emptyWorkspaceId, on: monitorId))
+        refreshWorkspaceSections(fixture)
+
+        let layout = try XCTUnwrap(fixture.projection.layoutsByMonitor[monitorId])
+        XCTAssertEqual(layout.workspaceSections.map(\.workspaceId), [fixture.workspaceIds[0], emptyWorkspaceId])
+        let activeSection = try XCTUnwrap(layout.workspaceSections.last)
+        XCTAssertTrue(activeSection.isActive)
+        XCTAssertTrue(activeSection.isEmpty)
+        XCTAssertTrue(OverviewNavigation.selections(in: layout, searching: false).contains(
+            .workspace(emptyWorkspaceId)
+        ))
+        XCTAssertEqual(layout.newWorkspaceTarget?.monitorId, monitorId)
+
+        fixture.projection.selection = .workspace(emptyWorkspaceId)
+        XCTAssertTrue(manager.setActiveWorkspace(fixture.workspaceIds[0], on: monitorId))
+        refreshWorkspaceSections(fixture)
+
+        XCTAssertEqual(
+            fixture.projection.layoutsByMonitor[monitorId]?.workspaceSections.map(\.workspaceId),
+            [fixture.workspaceIds[0]]
+        )
+        XCTAssertEqual(fixture.projection.selection, .window(try XCTUnwrap(fixture.localHandles.first)))
+    }
+
+    func testHideEmptyWorkspacesRespectsMonitorOverride() throws {
+        let fixture = try makeFixture(localWindowCount: 1)
+        let settings = fixture.controller.settings.workspaceBar
+        let monitor = fixture.monitors[0]
+        settings.hideEmptyWorkspaces = true
+        settings.update(
+            MonitorBarSettings(
+                monitorName: monitor.name,
+                monitorDisplayId: monitor.displayId,
+                hideEmptyWorkspaces: false
+            ),
+            for: monitor
+        )
+        refreshWorkspaceSections(fixture)
+
+        XCTAssertEqual(
+            fixture.projection.layoutsByMonitor[monitor.id]?.workspaceSections.map(\.workspaceId),
+            Array(fixture.workspaceIds.prefix(3))
+        )
+        XCTAssertEqual(
+            fixture.projection.layoutsByMonitor[fixture.monitors[1].id]?.workspaceSections.map(\.workspaceId),
+            [fixture.workspaceIds[3]]
+        )
+
+        settings.update(
+            MonitorBarSettings(
+                monitorName: monitor.name,
+                monitorDisplayId: monitor.displayId,
+                hideEmptyWorkspaces: true
+            ),
+            for: monitor
+        )
+        refreshWorkspaceSections(fixture)
+
+        XCTAssertEqual(
+            fixture.projection.layoutsByMonitor[monitor.id]?.workspaceSections.map(\.workspaceId),
+            [fixture.workspaceIds[0]]
+        )
+    }
+
+    func testHideEmptyWorkspacesRefreshesOpenOverviewWhenToggled() throws {
+        let fixture = try makeFixture(localWindowCount: 1)
+        let controller = fixture.controller
+        controller.toggleOverview()
+        defer { controller.windowActionHandler.releaseOverviewController() }
+
+        XCTAssertTrue(controller.isOverviewOpen())
+        let panel = try XCTUnwrap(controller.ownedWindowRegistry.visibleWindows(kind: .overview)
+            .compactMap { $0 as? OverviewWindow }
+            .first { $0.monitorId == fixture.monitors[0].id })
+        let view = try XCTUnwrap(panel.contentView?.subviews.compactMap { $0 as? OverviewView }.first)
+        XCTAssertEqual(view.layout.workspaceSections.map(\.workspaceId), Array(fixture.workspaceIds.prefix(3)))
+
+        controller.settings.workspaceBar.hideEmptyWorkspaces = true
+        controller.updateWorkspaceBarSettings()
+
+        XCTAssertTrue(controller.isOverviewOpen())
+        XCTAssertEqual(view.layout.workspaceSections.map(\.workspaceId), [fixture.workspaceIds[0]])
+
+        controller.settings.workspaceBar.hideEmptyWorkspaces = false
+        controller.updateWorkspaceBarSettings()
+
+        XCTAssertEqual(view.layout.workspaceSections.map(\.workspaceId), Array(fixture.workspaceIds.prefix(3)))
+    }
+
     func testTypingAndClearingPreserveRibbonsStackOffsetAndStripPan() throws {
         let fixture = try makeFixture(localWindowCount: 5, remoteWindowCount: 2)
         let monitorId = fixture.monitors[0].id
@@ -452,6 +584,7 @@ final class OverviewSelectionUXTests: XCTestCase {
     private struct Fixture {
         let controller: WMController
         let overview: OverviewController
+        let snapshot: OverviewSnapshot
         let projection: OverviewViewportProjection
         let input: OverviewInputHandler
         let windowSession: OverviewWindowSession
@@ -544,10 +677,15 @@ final class OverviewSelectionUXTests: XCTestCase {
         let input = OverviewInputHandler(projection: projection, windowSession: windowSession, snapshot: snapshot)
         input.connect(controller: overview)
         return Fixture(
-            controller: controller, overview: overview, projection: projection, input: input,
+            controller: controller, overview: overview, snapshot: snapshot, projection: projection, input: input,
             windowSession: windowSession,
             monitors: monitors, workspaceIds: workspaceIds, localHandles: localHandles, remoteHandles: remoteHandles
         )
+    }
+
+    private func refreshWorkspaceSections(_ fixture: Fixture) {
+        fixture.snapshot.refresh(affectedWorkspaceIds: [])
+        fixture.projection.rebuildProjectedLayouts()
     }
 
     private func addWindows(

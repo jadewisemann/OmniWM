@@ -16,6 +16,8 @@ final class ManualMultitouchSleeper {
     private(set) var requestedDurations: [Duration] = []
     private var nextId: UInt64 = 0
     private var waiters: [Waiter] = []
+    private var requestWaiters: [(count: Int, continuation: CheckedContinuation<Void, Never>)] = []
+    private var wakeWaiters: [UInt64: CheckedContinuation<Void, Never>] = [:]
 
     var pendingCount: Int {
         waiters.count
@@ -28,7 +30,9 @@ final class ManualMultitouchSleeper {
         try await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
                 waiters.append(Waiter(id: id, continuation: continuation))
+                resumeRequestWaiters()
             }
+            wakeWaiters.removeValue(forKey: id)?.resume()
             try Task.checkCancellation()
         } onCancel: {
             Task { @MainActor [weak self] in
@@ -37,16 +41,41 @@ final class ManualMultitouchSleeper {
         }
     }
 
-    func resumeNext() {
-        guard !waiters.isEmpty else { return }
-        waiters.removeFirst().continuation.resume()
+    func waitForRequests(_ count: Int) async {
+        guard requestedDurations.count < count else { return }
+        await withCheckedContinuation { requestWaiters.append((count, $0)) }
     }
 
-    func resumeAll() {
+    func waitForScheduledSleep(of source: MultitouchGestureSource) async {
+        guard waiters.isEmpty, source.diagnosticsSnapshot().nextRetryDelay != nil else { return }
+        await waitForRequests(requestedDurations.count + 1)
+    }
+
+    func resumeNext() async {
+        guard !waiters.isEmpty else { return }
+        await wake(waiters.removeFirst())
+    }
+
+    func resumeAll() async {
         let pending = waiters
         waiters.removeAll(keepingCapacity: false)
         for waiter in pending {
+            await wake(waiter)
+        }
+    }
+
+    private func wake(_ waiter: Waiter) async {
+        await withCheckedContinuation { woke in
+            wakeWaiters[waiter.id] = woke
             waiter.continuation.resume()
+        }
+    }
+
+    private func resumeRequestWaiters() {
+        let ready = requestWaiters.filter { $0.count <= requestedDurations.count }
+        requestWaiters.removeAll { $0.count <= requestedDurations.count }
+        for (_, waiter) in ready {
+            waiter.resume()
         }
     }
 

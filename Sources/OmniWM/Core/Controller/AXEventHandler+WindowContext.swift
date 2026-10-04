@@ -9,6 +9,18 @@ enum WindowServerIdentityResolution {
     case mismatched
     case unavailable
 
+    init(windowId: UInt32, info: WindowServerInfo?) {
+        guard let info else {
+            self = .unavailable
+            return
+        }
+        guard info.id == windowId else {
+            self = .mismatched
+            return
+        }
+        self = .exact(token: WindowToken(pid: info.pid, windowId: Int(windowId)), info: info)
+    }
+
     var token: WindowToken? {
         guard case let .exact(token, _) = self else { return nil }
         return token
@@ -230,18 +242,13 @@ extension AXEventHandler {
         windowInfoProvider(windowId)
     }
 
-    func resolveWindowInfo(_ windowIds: Set<UInt32>) -> [UInt32: WindowServerInfo] {
+    func resolveWindowInfo(_ windowIds: Set<UInt32>) async throws -> [UInt32: WindowServerInfo] {
         guard !windowIds.isEmpty else { return [:] }
-        return windowInfoBatchProvider(windowIds) ?? [:]
+        return try await windowInfoBatchProvider(windowIds) ?? [:]
     }
 
     func resolveWindowServerIdentity(_ windowId: UInt32) -> WindowServerIdentityResolution {
-        guard let windowInfo = resolveWindowInfo(windowId) else { return .unavailable }
-        guard windowInfo.id == windowId else { return .mismatched }
-        return .exact(
-            token: WindowToken(pid: windowInfo.pid, windowId: Int(windowId)),
-            info: windowInfo
-        )
+        WindowServerIdentityResolution(windowId: windowId, info: resolveWindowInfo(windowId))
     }
 
     func resolveWindowToken(_ windowId: UInt32) -> WindowToken? {

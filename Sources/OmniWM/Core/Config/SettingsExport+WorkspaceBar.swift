@@ -6,6 +6,7 @@ import Foundation
 extension SettingsExport {
     struct WorkspaceBar: Codable, Equatable {
         var enabled: Bool
+        var hoverPreviewsEnabled: Bool
         var showLabels: Bool
         var showFloatingWindows: Bool
         var windowLevel: WorkspaceBarWindowLevel
@@ -40,6 +41,8 @@ extension SettingsExport.WorkspaceBar {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let defaults = Self.defaults()
         enabled = try container.decode(Bool.self, forKey: .enabled)
+        hoverPreviewsEnabled = try container.decodeIfPresent(Bool.self, forKey: .hoverPreviewsEnabled)
+            ?? defaults.hoverPreviewsEnabled
         showLabels = try container.decode(Bool.self, forKey: .showLabels)
         showFloatingWindows = try container.decode(Bool.self, forKey: .showFloatingWindows)
         windowLevel = try container.decode(WorkspaceBarWindowLevel.self, forKey: .windowLevel)
@@ -75,6 +78,7 @@ extension SettingsExport.WorkspaceBar {
     static func defaults() -> Self {
         Self(
             enabled: true,
+            hoverPreviewsEnabled: true,
             showLabels: true,
             showFloatingWindows: false,
             windowLevel: .popup,

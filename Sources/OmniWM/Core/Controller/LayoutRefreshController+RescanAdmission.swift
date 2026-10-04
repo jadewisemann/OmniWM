@@ -134,6 +134,7 @@ extension LayoutRefreshController {
         let wsForWindow = admission.assignment.workspaceId
         let ruleEffects = admission.assignment.ruleEffects
         let admissionHints = admission.assignment.admissionHints
+        let isMinimized = refreshedEntry?.observedState.isMinimized ?? window.candidate.minimizedAttribute ?? false
         if let refreshedEntry,
            !Self.shouldReadmitTrackedWindow(
                entry: refreshedEntry,
@@ -152,6 +153,9 @@ extension LayoutRefreshController {
             )
             return refreshedEntry.token
         } else {
+            if isMinimized {
+                controller.axManager.setWindowMinimized(true, token: window.identity.token)
+            }
             return controller.workspaceManager.addWindow(
                 ax,
                 pid: pid,
@@ -160,7 +164,8 @@ extension LayoutRefreshController {
                 mode: admittedMode,
                 ruleEffects: ruleEffects,
                 admissionHints: admissionHints,
-                allowsNativeFocusAdoption: !appFullscreen,
+                allowsNativeFocusAdoption: !appFullscreen && !isMinimized,
+                isMinimized: isMinimized,
                 managedReplacementMetadata: managedReplacementMetadata
             )
         }

@@ -26,6 +26,20 @@ final class OverviewThumbnailCapture {
     typealias StreamFactory = @MainActor (OverviewPreviewRequest, OverviewPreviewStream) async throws
         -> any OverviewPreviewStreamControl
 
+    enum CacheReleaseReason {
+        case memoryPressure, shutdown, explicitRelease
+
+        var traceReason: OverviewFrameTrace.PreviewReason {
+            switch self {
+            case .memoryPressure: .memoryPressure
+            case .shutdown: .shutdown
+            case .explicitRelease: .explicitRelease
+            }
+        }
+    }
+
+    private static var nextCacheId: UInt64 = 0
+
     private enum Status {
         case queued, starting, running, completed, failed
     }
@@ -54,6 +68,9 @@ final class OverviewThumbnailCapture {
         var lastRequestedUse: UInt64
     }
 
+    private let consumer: OverviewFrameTrace.PreviewConsumer
+    private let cacheId: UInt64
+    private let traceRecorder: OverviewFrameTrace.Recorder
     private let environment: OverviewEnvironment
     private let ownedWindowRegistry: OwnedWindowRegistry
     private let hasCaptureAccess: @MainActor () -> Bool
@@ -76,10 +93,16 @@ final class OverviewThumbnailCapture {
     init(
         environment: OverviewEnvironment,
         ownedWindowRegistry: OwnedWindowRegistry,
+        consumer: OverviewFrameTrace.PreviewConsumer = .overview,
+        traceRecorder: OverviewFrameTrace.Recorder = OverviewFrameTrace.shared,
         hasCaptureAccess: @escaping @MainActor () -> Bool = { CGPreflightScreenCaptureAccess() },
         maximumRetainedBytes: Int = 128 * 1_024 * 1_024,
         streamFactory: StreamFactory? = nil
     ) {
+        Self.nextCacheId &+= 1
+        cacheId = Self.nextCacheId
+        self.consumer = consumer
+        self.traceRecorder = traceRecorder
         self.environment = environment
         self.ownedWindowRegistry = ownedWindowRegistry
         self.hasCaptureAccess = hasCaptureAccess
@@ -87,18 +110,13 @@ final class OverviewThumbnailCapture {
         self.streamFactory = streamFactory
         memoryPressure = DispatchSource.makeMemoryPressureSource(eventMask: [.warning, .critical], queue: .main)
         memoryPressure.setEventHandler { [weak self] in
-            MainActor.assumeIsolated { self?.releaseCache() }
+            MainActor.assumeIsolated { self?.releaseCache(reason: .memoryPressure) }
         }
         memoryPressure.activate()
     }
 
     isolated deinit {
         memoryPressure.cancel()
-    }
-
-    func preview(for handle: WindowHandle) -> OverviewPreviewFrame? {
-        guard let cached = previewCache[handle], cached.token == handle.token else { return nil }
-        return cached.frame
     }
 
     var hasPendingFirstFrames: Bool {
@@ -121,7 +139,9 @@ final class OverviewThumbnailCapture {
             where (!retainingUnrepresentedPreviews && !represented.contains(handle))
             || previewCache[handle]?.token != handle.token
         {
-            previewCache.removeValue(forKey: handle)
+            let reason: OverviewFrameTrace.PreviewReason = previewCache[handle]?.token != handle.token
+                ? .tokenChanged : .unrepresented
+            removeCachedPreview(for: handle, reason: reason)
             onPreview(handle, nil)
         }
         let requests = collectRequests(represented: represented, visible: visible, selectedHandle: selectedHandle)
@@ -162,7 +182,7 @@ final class OverviewThumbnailCapture {
         let key = ObjectIdentifier(handle)
         if let source = sources.removeValue(forKey: key) { retire(source) }
         sourceOrder.removeAll { $0 == key }
-        previewCache.removeValue(forKey: handle)
+        removeCachedPreview(for: handle, reason: .removed)
         onPreview(handle, nil)
         onReadinessChange()
     }
@@ -175,27 +195,9 @@ final class OverviewThumbnailCapture {
         sources.removeAll()
         sourceOrder.removeAll()
         trimRetainedPreviews()
-    }
-
-    private func trimRetainedPreviews() {
-        guard cachedByteCount > maximumRetainedBytes else { return }
-        var remaining = maximumRetainedBytes
-        for (handle, preview) in previewCache.sorted(by: { $0.value.lastRequestedUse > $1.value.lastRequestedUse }) {
-            let bytes = preview.frame.surface.allocationSize
-            if bytes <= remaining {
-                remaining -= bytes
-            } else {
-                previewCache.removeValue(forKey: handle)
-                onPreview(handle, nil)
-            }
+        if traceRecorder.isActive {
+            traceRecorder.record(record(.previewCacheCleared, reason: .retained, bytes: cachedByteCount))
         }
-    }
-
-    func releaseCache() {
-        guard sources.isEmpty else { return }
-        let handles = Array(previewCache.keys)
-        previewCache.removeAll()
-        for handle in handles { onPreview(handle, nil) }
     }
 
     private func retire(_ source: Source) {
@@ -325,7 +327,7 @@ final class OverviewThumbnailCapture {
                     else { return nil }
                     return (WindowToken(pid: app.processID, windowId: Int(window.windowID)), window)
                 })
-                OverviewFrameTrace.shared.record(Self.record(
+                traceRecorder.record(record(
                     .previewDiscovery,
                     sourceId: expectedGeneration,
                     requestedAt: startedAt,
@@ -342,20 +344,98 @@ final class OverviewThumbnailCapture {
 }
 
 extension OverviewThumbnailCapture {
-    private func trace(_ event: OverviewFrameTrace.Event, source: Source) {
-        OverviewFrameTrace.shared.record(Self.record(
-            event,
-            sourceId: source.id,
-            requestedAt: source.requestedAt,
-            sequence: UInt64(source.request.token.windowId)
+    func preview(for handle: WindowHandle) -> OverviewPreviewFrame? {
+        guard let cached = previewCache[handle], cached.token == handle.token else { return nil }
+        nextRequestedUse &+= 1
+        previewCache[handle]?.lastRequestedUse = nextRequestedUse
+        sources[ObjectIdentifier(handle)]?.lastRequestedUse = nextRequestedUse
+        return cached.frame
+    }
+
+    func remove(token: WindowToken) {
+        let handles = Set(previewCache.compactMap { handle, cached in
+            cached.token == token || handle.token == token ? handle : nil
+        }).union(sources.values.compactMap { source in
+            source.request.token == token || source.request.handle.token == token ? source.request.handle : nil
+        })
+        for handle in handles { remove(handle: handle) }
+    }
+
+    private func trimRetainedPreviews() {
+        guard cachedByteCount > maximumRetainedBytes else { return }
+        var remaining = maximumRetainedBytes
+        for (handle, preview) in previewCache.sorted(by: { $0.value.lastRequestedUse > $1.value.lastRequestedUse }) {
+            let bytes = preview.frame.surface.allocationSize
+            if bytes <= remaining {
+                remaining -= bytes
+            } else {
+                removeCachedPreview(for: handle, reason: .budget)
+                onPreview(handle, nil)
+            }
+        }
+    }
+
+    func releaseCache(reason: CacheReleaseReason = .explicitRelease) {
+        guard sources.isEmpty else { return }
+        let handles = Array(previewCache.keys)
+        if traceRecorder.isActive {
+            for cached in previewCache.values {
+                traceEviction(cached, reason: reason.traceReason, cachedCount: 0)
+            }
+        }
+        previewCache.removeAll()
+        for handle in handles { onPreview(handle, nil) }
+    }
+
+    private func removeCachedPreview(for handle: WindowHandle, reason: OverviewFrameTrace.PreviewReason) {
+        guard let cached = previewCache.removeValue(forKey: handle) else { return }
+        traceEviction(cached, reason: reason)
+    }
+
+    private func traceEviction(
+        _ cached: CachedPreview,
+        reason: OverviewFrameTrace.PreviewReason,
+        cachedCount: Int? = nil
+    ) {
+        guard traceRecorder.isActive else { return }
+        traceRecorder.record(record(
+            .previewEvicted,
+            token: cached.token,
+            reason: reason,
+            pixelWidth: cached.frame.surface.width,
+            pixelHeight: cached.frame.surface.height,
+            bytes: cached.frame.surface.allocationSize,
+            cachedCount: cachedCount
         ))
     }
 
-    private static func record(
+    private func trace(_ event: OverviewFrameTrace.Event, source: Source) {
+        guard traceRecorder.isActive else { return }
+        let cached = previewCache[source.request.handle]
+        traceRecorder.record(record(
+            event,
+            sourceId: source.id,
+            requestedAt: source.requestedAt,
+            sequence: UInt64(source.request.token.windowId),
+            token: source.request.token,
+            reason: event == .previewRequested ? (cached == nil ? .cacheMiss : .cachedRefresh) : nil,
+            pixelWidth: source.request.pixelWidth,
+            pixelHeight: source.request.pixelHeight,
+            bytes: cached?.frame.surface.allocationSize ?? 0
+        ))
+    }
+
+    private func record(
         _ event: OverviewFrameTrace.Event,
-        sourceId: UInt64,
-        requestedAt: CFTimeInterval,
-        sequence: UInt64
+        sourceId: UInt64 = 0,
+        requestedAt: CFTimeInterval? = nil,
+        sequence: UInt64 = 0,
+        token: WindowToken? = nil,
+        reason: OverviewFrameTrace.PreviewReason? = nil,
+        pixelWidth: Int = 0,
+        pixelHeight: Int = 0,
+        bytes: Int = 0,
+        cachedCount: Int? = nil
     ) -> OverviewFrameTrace.Record {
         let now = CACurrentMediaTime()
         return OverviewFrameTrace.Record(
@@ -365,12 +445,24 @@ extension OverviewThumbnailCapture {
             generation: sourceId,
             sequence: sequence,
             progress: 0,
-            durationMs: (now - requestedAt) * 1000,
+            durationMs: requestedAt.map { (now - $0) * 1000 } ?? 0,
             waitMs: 0,
             targetLeadMs: 0,
             pendingInvalidations: 0,
             endpointScheduled: false,
-            sessionCompleted: false
+            sessionCompleted: false,
+            preview: OverviewFrameTrace.Preview(
+                consumer: consumer,
+                cacheId: cacheId,
+                pid: token?.pid ?? 0,
+                windowId: token?.windowId ?? 0,
+                reason: reason,
+                firstFrameOnly: stopsAfterFirstFrame,
+                pixelWidth: pixelWidth,
+                pixelHeight: pixelHeight,
+                bytes: bytes,
+                cachedCount: cachedCount ?? previewCache.count
+            )
         )
     }
 

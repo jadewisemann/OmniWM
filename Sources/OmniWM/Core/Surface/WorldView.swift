@@ -121,7 +121,8 @@ struct WorldView {
                         showAccentHighlights: resolved.showAccentHighlights,
                         barHeight: geometry.barHeight,
                         accentColor: resolved.accentColor,
-                        textColor: resolved.textColor
+                        textColor: resolved.textColor,
+                        orientation: resolved.position.isVertical ? .vertical : .horizontal
                     )
                 )
             )
@@ -159,7 +160,7 @@ struct WorldView {
     private func isPlaceholderDescriptorVisible(entry: WindowState) -> Bool {
         let workspaceManager = controller.workspaceManager
         guard isWorkspaceVisible(entry.workspaceId),
-              !workspaceManager.isAppHidden(pid: entry.pid),
+              !workspaceManager.isWindowSuppressedByMacOS(entry.token),
               !workspaceManager.isHiddenInCorner(entry.token)
         else { return false }
         guard spaceTopology.isPopulated,
@@ -214,7 +215,9 @@ struct WorldView {
             return liveBoundsProvider(windowId)
         }
         guard windowId > 0,
-              let bounds = SkyLight.shared.getWindowBounds(UInt32(windowId)),
+              let bounds = MainThreadAXSpanTrace.measure(.borderLiveBounds, windowId: windowId, {
+                  SkyLight.shared.getWindowBounds(UInt32(windowId))
+              }, succeeded: { $0 != nil }),
               bounds.width > 0, bounds.height > 0
         else {
             return nil

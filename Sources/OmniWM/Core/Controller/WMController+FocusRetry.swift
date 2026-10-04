@@ -15,7 +15,7 @@ extension WMController {
         guard let entry = workspaceManager.entry(for: request.token),
               entry.workspaceId == request.workspaceId,
               let handle = workspaceManager.handle(for: request.token),
-              !isManagedWindowSuppressedByMacOSHide(request.token),
+              !isManagedWindowSuppressedByMacOS(request.token),
               let job = intentLedger.beginDeferredRetryRaise(for: request)
         else { return }
         let handleIdentity = ObjectIdentifier(handle)
@@ -30,7 +30,7 @@ extension WMController {
                   currentEntry.workspaceId == liveRequest.workspaceId,
                   sameAXWindowIdentity(currentEntry.axRef, expectedWindow),
                   workspaceManager.handle(for: liveRequest.token).map(ObjectIdentifier.init) == handleIdentity,
-                  !isManagedWindowSuppressedByMacOSHide(liveRequest.token),
+                  !isManagedWindowSuppressedByMacOS(liveRequest.token),
                   workspaceManager.pendingManagedFocusMatches(
                       token: liveRequest.token,
                       workspaceId: liveRequest.workspaceId,
@@ -55,7 +55,7 @@ extension WMController {
               liveRequest.token == request.token,
               let entry = workspaceManager.entry(for: liveRequest.token),
               entry.workspaceId == request.workspaceId,
-              !isManagedWindowSuppressedByMacOSHide(liveRequest.token)
+              !isManagedWindowSuppressedByMacOS(liveRequest.token)
         else {
             return
         }

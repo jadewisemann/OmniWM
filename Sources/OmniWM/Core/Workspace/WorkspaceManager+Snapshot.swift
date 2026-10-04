@@ -11,6 +11,24 @@ extension WorkspaceManager {
         return settings.workspaces.layoutType(for: descriptor.name) == .dwindle ? .dwindle : .niri
     }
 
+    func isInactiveTabMember(_ token: WindowToken, in workspaceId: WorkspaceDescriptor.ID) -> Bool {
+        switch activeLayoutKind(for: workspaceId) {
+        case .dwindle:
+            return dwindleEngine?.isInactiveGroupMember(token, in: workspaceId) == true
+        case .niri:
+            guard let engine = niriEngine,
+                  let window = engine.findNode(for: token, in: workspaceId),
+                  let column = engine.column(of: window),
+                  column.isTabbed,
+                  !engine.isExcludedFromProjection(token, in: workspaceId),
+                  let activeWindow = engine.projectedActiveWindow(in: column, workspaceId: workspaceId)
+            else {
+                return false
+            }
+            return activeWindow !== window
+        }
+    }
+
     func reconcileSnapshot() -> ReconcileSnapshot {
         var entries = windowQueries.allEntries()
         entries.sort {

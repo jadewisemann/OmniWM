@@ -19,7 +19,7 @@ final class IPCCaptureContractTests: XCTestCase {
             let data = try IPCWire.makeEncoder().encode(request)
             let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
 
-            XCTAssertEqual(object["version"] as? Int, 15)
+            XCTAssertEqual(object["version"] as? Int, 17)
             XCTAssertEqual(object["kind"] as? String, "capture")
             XCTAssertEqual(object["payload"] as? [String: String], expectedPayload)
             XCTAssertEqual(try IPCWire.makeDecoder().decode(IPCRequest.self, from: data), request)
@@ -92,9 +92,12 @@ final class IPCCaptureContractTests: XCTestCase {
             ruleActions: [],
             workspaceActions: [],
             windowActions: [],
+            windowMarkActions: [],
             subscriptions: []
         )
-        let commands = IPCCommandsQueryResult(commands: [], workspaceActions: [], windowActions: [])
+        let commands = IPCCommandsQueryResult(
+            commands: [], workspaceActions: [], windowActions: [], windowMarkActions: []
+        )
         let encoder = IPCWire.makeEncoder()
         let capabilitiesObject = try XCTUnwrap(
             JSONSerialization.jsonObject(with: encoder.encode(capabilities)) as? [String: Any]

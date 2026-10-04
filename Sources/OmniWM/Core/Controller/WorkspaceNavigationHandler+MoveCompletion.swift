@@ -8,7 +8,8 @@ import OmniWMIPC
 extension WorkspaceNavigationHandler {
     func finishWorkspaceMove(
         _ mutation: StructuralMutation,
-        focusPolicy: WorkspaceMoveFocusPolicy = .configured
+        focusPolicy: WorkspaceMoveFocusPolicy = .configured,
+        focusOrigin: ManagedFocusOrigin = .keyboardOrProgrammatic
     ) {
         guard let controller else { return }
         let sourceWorkspaceId = mutation.sourceWorkspaceId
@@ -24,7 +25,12 @@ extension WorkspaceNavigationHandler {
             return
         }
 
-        let completion = workspaceMoveFocusCompletion(mutation, focusPolicy: focusPolicy, controller: controller)
+        let completion = workspaceMoveFocusCompletion(
+            mutation,
+            focusPolicy: focusPolicy,
+            focusOrigin: focusOrigin,
+            controller: controller
+        )
         let postLayout = completion.postLayout
 
         let newestFocusIntentId = controller.intentLedger.newestFocusIntentId()
@@ -108,7 +114,7 @@ extension WorkspaceNavigationHandler {
                     context: .init(
                         workspaceId: workspaceId,
                         motion: controller.motionPolicy.snapshot(),
-                        workingFrame: controller.insetWorkingFrame(for: monitor),
+                        workingFrame: controller.niriWorkingFrame(for: monitor),
                         gaps: controller.innerGap(for: monitor),
                         orientation: controller.settings.monitors.effectiveOrientation(for: monitor)
                     ),
@@ -127,6 +133,7 @@ extension WorkspaceNavigationHandler {
     private func workspaceMoveFocusCompletion(
         _ mutation: StructuralMutation,
         focusPolicy: WorkspaceMoveFocusPolicy,
+        focusOrigin: ManagedFocusOrigin,
         controller: WMController
     ) -> WorkspaceMoveFocusCompletion {
         let sourceWorkspaceId = mutation.sourceWorkspaceId
@@ -153,7 +160,7 @@ extension WorkspaceNavigationHandler {
                 else {
                     return
                 }
-                controller.focusWindow(focusToken)
+                controller.focusWindow(focusToken, origin: focusOrigin)
             }
         } else {
             gateWorkspaceIds = [sourceWorkspaceId]
@@ -166,7 +173,7 @@ extension WorkspaceNavigationHandler {
                 if let focusToken = controller.resolveAndSetWorkspaceFocusToken(for: sourceWorkspaceId),
                    controller.workspaceManager.entry(for: focusToken)?.workspaceId == sourceWorkspaceId
                 {
-                    controller.focusWindow(focusToken)
+                    controller.focusWindow(focusToken, origin: focusOrigin)
                 } else if controller.workspaceManager.entries(in: sourceWorkspaceId).isEmpty {
                     self?.clearManagedFocusAfterEmptyWorkspaceSwitch()
                 }

@@ -128,13 +128,12 @@ final class TrackpadPhysicalTraceTests: XCTestCase {
         let sleeper = ManualMultitouchSleeper()
         let source = MultitouchGestureSource(operations: backend.operations(sleeper: sleeper))
         source.startLifecycle()
-        await drainMultitouchTasks()
-        sleeper.resumeNext()
-        await drainMultitouchTasks()
+        await sleeper.waitForScheduledSleep(of: source)
+        await sleeper.resumeNext()
         defer {
             endTrace()
             source.shutdown()
-            sleeper.resumeAll()
+            await sleeper.resumeAll()
         }
         let generation = try XCTUnwrap(source.diagnosticsSnapshot().activeGeneration)
         backend.emitFrame(registryId: 101, touches: [(0.4, 0.5), (0.5, 0.5)], timestamp: 1.00)
@@ -160,13 +159,12 @@ final class TrackpadPhysicalTraceTests: XCTestCase {
         let sleeper = ManualMultitouchSleeper()
         let source = MultitouchGestureSource(operations: backend.operations(sleeper: sleeper))
         source.startLifecycle()
-        await drainMultitouchTasks()
-        sleeper.resumeNext()
-        await drainMultitouchTasks()
+        await sleeper.waitForScheduledSleep(of: source)
+        await sleeper.resumeNext()
         defer {
             endTrace()
             source.shutdown()
-            sleeper.resumeAll()
+            await sleeper.resumeAll()
         }
         let generation = try XCTUnwrap(source.diagnosticsSnapshot().activeGeneration)
 

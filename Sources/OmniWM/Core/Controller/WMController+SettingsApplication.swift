@@ -30,6 +30,7 @@ extension WMController {
         updateAppRules()
 
         borderSettingsChanged()
+        setOverviewEnabled(settings.overview.enabled)
         updateOverviewSettings()
 
         setFocusFollowsMouse(settings.focus.followsMouse)

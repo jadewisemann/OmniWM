@@ -92,4 +92,11 @@ extension WorkspaceManager {
             resolvePlan: { plan, _, _ in plan }
         )
     }
+
+    func invalidateNiriCachedPrimarySpans() {
+        guard let niriEngine else { return }
+        withEngineMutationScope(label: "gap_settings_changed") {
+            niriEngine.invalidateCachedPrimarySpans()
+        }
+    }
 }

@@ -110,6 +110,16 @@ extension AXFrameApplyResult {
         )
     }
 
+    func recordParkTerminalFailure(_ failureReason: AXFrameWriteFailureReason, retriesRemaining: Int) {
+        guard FrameApplyTrace.shared.isActive else { return }
+        FrameApplyTrace.recordEvent(
+            pid: pid, windowId: windowId,
+            outcome: "outcome=ax-park-terminal/\(failureReason.traceDescription) remaining=\(retriesRemaining)",
+            target: targetFrame, observed: writeResult.observedFrame,
+            requestId: requestId, traceRequestId: traceRequestId, lane: .park
+        )
+    }
+
     func recordParkFailure(_ failureReason: AXFrameWriteFailureReason) {
         FrameApplyTrace.recordEvent(
             pid: pid,

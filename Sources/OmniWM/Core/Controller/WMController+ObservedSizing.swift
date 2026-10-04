@@ -12,7 +12,7 @@ extension WMController {
               entry.mode == .tiling,
               entry.layoutReason == .standard,
               entry.hiddenState == nil,
-              !workspaceManager.isAppHidden(pid: entry.pid),
+              !workspaceManager.isWindowSuppressedByMacOS(entry.token),
               let observed = result.writeResult.observedFrame?.size
         else {
             return

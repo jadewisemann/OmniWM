@@ -153,6 +153,7 @@ struct RestorePlanner {
              .focusLeaseChanged,
              .focusRemembered,
              .hiddenApplicationsChanged,
+             .windowMinimizedChanged,
              .hiddenStateChanged,
              .interactionMonitorChanged,
              .layoutOperationPerformed,

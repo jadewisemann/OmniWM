@@ -142,6 +142,90 @@ final class FullRescanWindowAdmissionTests: XCTestCase {
         XCTAssertTrue(focusOperations.isEmpty)
     }
 
+    func testFullRescanAdmitsInitiallyMinimizedWindowWithoutAdoptingFocus() throws {
+        let controller = WindowAdmissionTestSupport.controller()
+        defer {
+            controller.layoutRefreshController.resetState()
+            controller.axManager.cleanup()
+        }
+        let manager = controller.workspaceManager
+        let workspaceId = try XCTUnwrap(manager.workspaceId(for: "1", createIfMissing: true))
+        let token = WindowToken(pid: 467_322, windowId: 467_323)
+        let frame = CGRect(x: 120, y: 80, width: 720, height: 520)
+        let facts = replacementFacts(token: token, bundleId: "org.example.minimized", frame: frame)
+        let candidate = candidate(
+            pid: token.pid,
+            windowId: token.windowId,
+            decisionEvidence: AXWindowDecisionEvidence(facts: facts.ax, sizeConstraints: .unconstrained),
+            admissionGeometry: WindowAdmissionGeometryEvidence(isSizeSettable: true, frame: frame),
+            fullscreenAttribute: false,
+            minimizedAttribute: true,
+            windowServerInfo: facts.windowServer
+        )
+        manager.recordExternalFocus(pid: token.pid, windowId: token.windowId)
+        var progress = FullRescanProgress(affectedWorkspaceIds: [])
+
+        controller.layoutRefreshController.reconcileFullRescanCandidate(
+            candidate,
+            context: FullRescanMutationContext(
+                controller: controller,
+                enumerationSnapshot: enumerationSnapshot(for: candidate),
+                scope: .all,
+                focusedWorkspaceId: workspaceId,
+                screenFrames: []
+            ),
+            progress: &progress
+        )
+
+        let entry = try XCTUnwrap(manager.entry(for: token))
+        XCTAssertEqual(entry.workspaceId, workspaceId)
+        XCTAssertEqual(entry.mode, .tiling)
+        XCTAssertTrue(entry.observedState.isMinimized)
+        XCTAssertNil(manager.nativeManagedFocusToken)
+        XCTAssertNil(manager.borderFocusToken)
+        XCTAssertTrue(progress.seenKeys.contains(token))
+    }
+
+    func testFullRescanPreservesUnknownMinimizationAndAppliesCapturedRestore() throws {
+        let controller = WindowAdmissionTestSupport.controller()
+        defer {
+            controller.layoutRefreshController.resetState()
+            controller.axManager.cleanup()
+        }
+        let manager = controller.workspaceManager
+        let workspaceId = try XCTUnwrap(manager.workspaceId(for: "1", createIfMissing: true))
+        let token = WindowToken(pid: 467_324, windowId: 467_325)
+        let axRef = WindowAdmissionTestSupport.axRef(for: token)
+        manager.addWindow(axRef, pid: token.pid, windowId: token.windowId, to: workspaceId, isMinimized: true)
+        let originalHandle = try XCTUnwrap(manager.handle(for: token))
+
+        for minimized: Bool? in [nil, false] {
+            let candidate = candidate(
+                pid: token.pid,
+                windowId: token.windowId,
+                axRef: axRef,
+                minimizedAttribute: minimized
+            )
+            var progress = FullRescanProgress(affectedWorkspaceIds: [])
+            let identity = controller.layoutRefreshController.prepareFullRescanCandidateIdentity(
+                candidate,
+                context: FullRescanMutationContext(
+                    controller: controller,
+                    enumerationSnapshot: enumerationSnapshot(for: candidate),
+                    scope: .all,
+                    focusedWorkspaceId: workspaceId,
+                    screenFrames: []
+                ),
+                progress: &progress
+            )
+
+            let entry = try XCTUnwrap(identity?.existingEntry)
+            XCTAssertEqual(manager.handle(for: entry.token), originalHandle)
+            XCTAssertEqual(entry.workspaceId, workspaceId)
+            XCTAssertEqual(entry.observedState.isMinimized, minimized ?? true)
+        }
+    }
+
     func testFullRescanExactHighLevelEvidenceRetiresEntryAfterRuleRemoval() async throws {
         let controller = WindowAdmissionTestSupport.controller()
         defer {
@@ -1297,13 +1381,16 @@ final class FullRescanWindowAdmissionTests: XCTestCase {
         }
 
         controller.axEventHandler.drainDeferredCreatedWindows { _ in [2] }
+        await controller.axEventHandler.lifecycleQueries.task?.value
         controller.axEventHandler.drainDeferredCreatedWindows { _ in [2] }
+        await controller.axEventHandler.lifecycleQueries.task?.value
         let firstProtectedTokens =
             controller.axEventHandler.protectMissingEntriesDuringUnsettledAdmission(
                 candidates: [oldToken, unrelatedToken],
                 scope: .all
             )
         controller.axEventHandler.drainDeferredCreatedWindows { _ in [2] }
+        await controller.axEventHandler.lifecycleQueries.task?.value
         let secondProtectedTokens =
             controller.axEventHandler.protectMissingEntriesDuringUnsettledAdmission(
                 candidates: [oldToken, unrelatedToken],
@@ -1833,7 +1920,7 @@ final class FullRescanWindowAdmissionTests: XCTestCase {
         )
     }
 
-    func testDeferredCreateTreatsPendingDestroyAndLiveEntryAsOneReplacement() throws {
+    func testDeferredCreateTreatsPendingDestroyAndLiveEntryAsOneReplacement() async throws {
         let controller = WindowAdmissionTestSupport.controller()
         let workspaceId = try XCTUnwrap(
             controller.workspaceManager.workspaceId(for: "1", createIfMissing: true)
@@ -1856,6 +1943,7 @@ final class FullRescanWindowAdmissionTests: XCTestCase {
         )
         controller.axEventHandler.windowInfoProvider = { _ in nil }
         controller.axEventHandler.handleCGSEvent(.closed(windowId: UInt32(oldToken.windowId)))
+        await controller.axEventHandler.lifecycleQueries.task?.value
         XCTAssertNotNil(controller.workspaceManager.entry(for: oldToken))
         deferCreatedWindow(newToken, controller: controller)
         let facts = replacementFacts(token: newToken, bundleId: bundleId, frame: frame)
@@ -2014,6 +2102,7 @@ final class FullRescanWindowAdmissionTests: XCTestCase {
         decisionEvidence: AXWindowDecisionEvidence? = nil,
         admissionGeometry: WindowAdmissionGeometryEvidence? = nil,
         fullscreenAttribute: Bool? = nil,
+        minimizedAttribute: Bool? = nil,
         windowServerInfo: WindowServerInfo? = nil
     ) -> FullRescanWindowCandidate {
         let evidence = decisionEvidence ?? .unavailable(
@@ -2034,6 +2123,7 @@ final class FullRescanWindowAdmissionTests: XCTestCase {
                     frame: CGRect(x: 0, y: 0, width: 640, height: 480)
                 ),
                 fullscreenAttribute: fullscreenAttribute,
+                minimizedAttribute: minimizedAttribute,
                 decisionEvidence: evidence
             ),
             logicalPID: pid,

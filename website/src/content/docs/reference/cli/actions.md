@@ -18,11 +18,27 @@ omniwmctl window move-to-workspace <opaque-id> <workspace>
 |--------|-------------|
 | `focus` | Focus a managed window by opaque ID |
 | `navigate` | Navigate to a managed window (switches workspace if needed) |
-| `summon-right` | Summon a window to the right of the currently focused window |
+| `summon-right` | Summon a window to the right of the currently focused window. Floating targets return `window_action_failed` |
 | `close` | Close a managed window through its close button; returns `window_action_failed` when the window has no close button or refuses the press. The window leaves the managed set only when macOS reports it destroyed |
 | `move-to-workspace` | Move a window to a workspace by raw workspace ID or unambiguous display name. Focus stays where it is; if the window is the focused one, the configured follow-focus behavior applies. A window already on the target returns `no_change`; an ambiguous display name returns `invalid_arguments` |
 
 Window IDs are session-scoped. They become stale after OmniWM restarts. Obtain IDs from query results (e.g., `omniwmctl query windows`).
+
+---
+
+## Window Marks
+
+Marks give live managed windows unique names across workspaces. They last until the window closes or OmniWM quits; they are not saved in settings. Unlike window actions by opaque ID, mark actions use the name you choose:
+
+| Action | Description |
+|--------|-------------|
+| `window mark set <name>` | Mark the focused managed window. Reusing its own name succeeds; a name on another window returns `duplicate_mark` |
+| `window mark list [--json]` | List marks with their current workspace, app, and window title |
+| `window mark focus <name>` | Navigate to the marked window, switching workspaces or unhiding its app as needed |
+| `window mark summon <name>` | Move a marked tiled window to the right of the focused window. Floating targets return `window_action_failed`; hidden targets return `hidden_window` |
+| `window mark remove <name>` | Remove a mark by name |
+
+`set` and `summon` need a focused managed window. Use `omniwmctl window mark list --json` for the `window-marks` result payload.
 
 ---
 

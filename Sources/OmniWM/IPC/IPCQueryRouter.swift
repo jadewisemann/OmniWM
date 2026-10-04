@@ -142,7 +142,8 @@ final class IPCQueryRouter {
             display: monitor.map(IPCDisplayRef.init(monitor:)),
             app: IPCAppRef(appInfo: appInfo),
             title: AXWindowService.titlePreferFast(windowId: UInt32(entry.windowId)),
-            frame: frame.map(IPCRect.init)
+            frame: frame.map(IPCRect.init),
+            isFullscreen: controller.workspaceManager.layoutTopology(for: entry.workspaceId).isFullscreen(focusedToken)
         )
 
         return IPCFocusedWindowQueryResult(window: snapshot)
@@ -199,7 +200,8 @@ final class IPCQueryRouter {
         IPCCommandsQueryResult(
             commands: IPCAutomationManifest.commandDescriptors,
             workspaceActions: IPCAutomationManifest.workspaceActionDescriptors,
-            windowActions: IPCAutomationManifest.windowActionDescriptors
+            windowActions: IPCAutomationManifest.windowActionDescriptors,
+            windowMarkActions: IPCAutomationManifest.windowMarkActionDescriptors
         )
     }
 
@@ -219,6 +221,7 @@ final class IPCQueryRouter {
             ruleActions: IPCAutomationManifest.ruleActionDescriptors,
             workspaceActions: IPCAutomationManifest.workspaceActionDescriptors,
             windowActions: IPCAutomationManifest.windowActionDescriptors,
+            windowMarkActions: IPCAutomationManifest.windowMarkActionDescriptors,
             subscriptions: IPCAutomationManifest.subscriptionDescriptors
         )
     }

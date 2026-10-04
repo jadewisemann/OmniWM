@@ -95,15 +95,156 @@ final class WorkspaceSwipePreviewTests: XCTestCase {
         XCTAssertFalse(preview.isVisible)
     }
 
+    func testIdleStopsReuseWallpaperButVisiblePreviewStopRefreshesIt() throws {
+        let image = try makeWallpaperImage()
+        var captures = 0
+        let cache = OverviewWallpaperCache()
+        cache.desktopImageURL = { _ in nil }
+        cache.captureWallpaper = { _ in
+            captures += 1
+            return image
+        }
+        let preview = WorkspaceSwipePreview(
+            ownedWindowRegistry: OwnedWindowRegistry(),
+            backdrop: WorkspaceSwipeBackdrop(wallpaperCache: cache),
+            hasCaptureAccess: { true }
+        )
+        defer { preview.stop() }
+        preview.prepare(source: [], destination: [], monitor: monitor)
+        preview.stop()
+        preview.prepare(source: [], destination: [], monitor: monitor)
+        XCTAssertEqual(captures, 1, "Ordinary trackpad touch cleanup must not trigger another wallpaper capture")
+
+        XCTAssertTrue(preview.begin(source: [], destination: [], monitor: monitor))
+        preview.stop()
+        preview.prepare(source: [], destination: [], monitor: monitor)
+        XCTAssertEqual(captures, 2, "A new visible swipe must refresh the wallpaper")
+    }
+
+    func testFailedWallpaperCaptureRecoversOnNextSwipeWithoutRecapturingIdleTouches() throws {
+        let image = try makeWallpaperImage()
+        var wallpaper: CGImage?
+        var captures = 0
+        let cache = OverviewWallpaperCache()
+        cache.desktopImageURL = { _ in nil }
+        cache.captureWallpaper = { _ in
+            captures += 1
+            return wallpaper
+        }
+        let preview = WorkspaceSwipePreview(
+            ownedWindowRegistry: OwnedWindowRegistry(),
+            backdrop: WorkspaceSwipeBackdrop(wallpaperCache: cache),
+            hasCaptureAccess: { true }
+        )
+        defer { preview.stop() }
+
+        preview.warm(source: [], destination: [], monitor: monitor)
+        preview.stop()
+        preview.warm(source: [], destination: [], monitor: monitor)
+        XCTAssertEqual(captures, 1)
+        XCTAssertFalse(preview.begin(source: [], destination: [], monitor: monitor))
+        XCTAssertFalse(preview.isVisible)
+        preview.stop()
+
+        wallpaper = image
+        preview.warm(source: [], destination: [], monitor: monitor)
+        XCTAssertTrue(preview.begin(source: [], destination: [], monitor: monitor))
+        XCTAssertTrue(preview.isVisible)
+        XCTAssertEqual(captures, 2)
+    }
+
+    func testCachedBackdropSkipsCaptureAccessCheckUntilItIsCleared() throws {
+        let image = try makeWallpaperImage()
+        var captures = 0
+        var accessChecks = 0
+        let cache = OverviewWallpaperCache()
+        cache.desktopImageURL = { _ in nil }
+        cache.captureWallpaper = { _ in
+            captures += 1
+            return image
+        }
+        let preview = WorkspaceSwipePreview(
+            ownedWindowRegistry: OwnedWindowRegistry(),
+            backdrop: WorkspaceSwipeBackdrop(wallpaperCache: cache),
+            hasCaptureAccess: {
+                accessChecks += 1
+                return true
+            }
+        )
+        defer { preview.stop() }
+
+        for _ in 0 ..< 3 {
+            preview.warm(source: [], destination: [], monitor: monitor)
+        }
+        XCTAssertEqual(accessChecks, 1)
+        XCTAssertEqual(captures, 1)
+
+        XCTAssertTrue(preview.begin(source: [], destination: [], monitor: monitor))
+        XCTAssertEqual(accessChecks, 2)
+        preview.stop()
+        preview.warm(source: [], destination: [], monitor: monitor)
+        XCTAssertEqual(accessChecks, 3)
+        XCTAssertEqual(captures, 2)
+    }
+
+    func testDeniedCaptureAccessIsCheckedOnEveryWarmAndNeverCaptures() {
+        var captures = 0
+        var accessChecks = 0
+        let cache = OverviewWallpaperCache()
+        cache.desktopImageURL = { _ in nil }
+        cache.captureWallpaper = { _ in
+            captures += 1
+            return nil
+        }
+        let preview = WorkspaceSwipePreview(
+            ownedWindowRegistry: OwnedWindowRegistry(),
+            backdrop: WorkspaceSwipeBackdrop(wallpaperCache: cache),
+            hasCaptureAccess: {
+                accessChecks += 1
+                return false
+            }
+        )
+        defer { preview.stop() }
+
+        for _ in 0 ..< 3 {
+            preview.warm(source: [], destination: [], monitor: monitor)
+        }
+        XCTAssertEqual(accessChecks, 3)
+        XCTAssertEqual(captures, 0)
+    }
+
+    func testRevokedAccessStillBlocksOverlayAfterCachedWarm() throws {
+        let access = CaptureAccess()
+        let preview = try WorkspaceSwipePreview(
+            ownedWindowRegistry: OwnedWindowRegistry(),
+            backdrop: makeBackdrop(),
+            hasCaptureAccess: { access.check() }
+        )
+        defer { preview.stop() }
+
+        preview.warm(source: [], destination: [], monitor: monitor)
+        access.granted = false
+        preview.warm(source: [], destination: [], monitor: monitor)
+        XCTAssertEqual(access.checks, 1)
+        XCTAssertFalse(preview.begin(source: [], destination: [], monitor: monitor))
+        XCTAssertFalse(preview.isVisible)
+        XCTAssertEqual(access.checks, 2)
+    }
+
     private func makeBackdrop() throws -> WorkspaceSwipeBackdrop {
         let cache = OverviewWallpaperCache()
         cache.desktopImageURL = { _ in nil }
+        let image = try makeWallpaperImage()
+        cache.captureWallpaper = { _ in image }
+        return WorkspaceSwipeBackdrop(wallpaperCache: cache)
+    }
+
+    private func makeWallpaperImage() throws -> CGImage {
         let context = try XCTUnwrap(CGContext(
             data: nil, width: 1200, height: 800, bitsPerComponent: 8, bytesPerRow: 4800,
             space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ))
-        let image = try XCTUnwrap(context.makeImage())
-        return WorkspaceSwipeBackdrop(wallpaperCache: cache, capture: { _ in image })
+        return try XCTUnwrap(context.makeImage())
     }
 
     private var monitor: Monitor {
@@ -131,5 +272,15 @@ final class WorkspaceSwipePreviewTests: XCTestCase {
         capture.onPreview = { _, preview in if preview === frame { published.fulfill() } }
         stream.output.offer(frame)
         await fulfillment(of: [published], timeout: 1)
+    }
+
+    private final class CaptureAccess {
+        var granted = true
+        var checks = 0
+
+        func check() -> Bool {
+            checks += 1
+            return granted
+        }
     }
 }

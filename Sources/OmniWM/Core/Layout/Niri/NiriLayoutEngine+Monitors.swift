@@ -147,6 +147,15 @@ extension NiriLayoutEngine {
         return nil
     }
 
+    func invalidateCachedPrimarySpans() {
+        assertSanctionedMutation()
+        for state in states.values {
+            for column in state.root.columns {
+                column.invalidateCachedPrimarySpans()
+            }
+        }
+    }
+
     func monitorForWorkspace(_ workspaceId: WorkspaceDescriptor.ID) -> NiriMonitor? {
         for niriMonitor in monitors.values where niriMonitor.containsWorkspace(workspaceId) {
             return niriMonitor

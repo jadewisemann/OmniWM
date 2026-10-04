@@ -135,11 +135,9 @@ final class OverviewController {
         }
     }
 
-    deinit {
-        MainActor.assumeIsolated {
-            endOwnedSession()
-            cleanup()
-        }
+    isolated deinit {
+        endOwnedSession()
+        cleanup()
     }
 }
 
@@ -414,6 +412,7 @@ extension OverviewController {
             endOwnedSession()
             updateWindowDisplays()
         }
+        wmController?.layoutRefreshController.collectUnusedWorkspacesIfIdle()
     }
 
     func handleManagedWindowRemoved(_ entry: WindowState) {

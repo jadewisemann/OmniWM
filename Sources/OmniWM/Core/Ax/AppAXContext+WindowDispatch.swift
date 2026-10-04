@@ -7,6 +7,22 @@ import Dispatch
 import Foundation
 
 extension AppAXContext {
+    func windowRefAsync(windowId: UInt32) async throws -> AXWindowRef? {
+        try Task.checkCancellation()
+        guard let thread = axThread else { throw AXWindowEnumerationError.contextUnavailable }
+        let pid = pid
+        let deadline = ProcessInfo.processInfo.systemUptime + AXManager.perAppTimeout
+        let timeout = Duration.milliseconds(Int64(AXManager.perAppTimeout * 1_000))
+        return try await thread.runInLoop(timeout: timeout) { job in
+            try AXWindowService.uncachedWindowRef(
+                windowId: windowId,
+                pid: pid,
+                deadline: deadline,
+                checkCancellation: { try job.checkCancellation() }
+            )
+        }
+    }
+
     func getWindowsAsync(
         timeoutSeconds: TimeInterval = 0.5,
         includeTitle: Bool = false,

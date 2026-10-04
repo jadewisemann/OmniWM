@@ -311,10 +311,19 @@ final class NiriInitialContainerPrimarySpanTests: XCTestCase {
     @MainActor
     func testHandlerSeedsAdmissionWidthBeforeFirstConstraintResolutionAndLeavesLiveStateUntouched() throws {
         let controller = makeController()
+        let monitor = Monitor(
+            id: .init(displayId: 78_310),
+            displayId: 78_310,
+            frame: CGRect(x: 0, y: 0, width: 1_200, height: 800),
+            visibleFrame: CGRect(x: 0, y: 0, width: 1_200, height: 800),
+            hasNotch: false,
+            name: "Niri Initial Span"
+        )
+        controller.workspaceManager.applyMonitorConfigurationChange([monitor])
         let workspaceId = try XCTUnwrap(
             controller.workspaceManager.workspaceId(for: "1", createIfMissing: true)
         )
-        let monitor = try XCTUnwrap(controller.workspaceManager.monitor(for: workspaceId))
+        XCTAssertEqual(controller.workspaceManager.monitor(for: workspaceId)?.id, monitor.id)
         controller.settings.monitors.updateOrientationSettings(
             MonitorOrientationSettings(
                 monitorName: monitor.name,

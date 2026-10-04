@@ -221,29 +221,36 @@ final class EventIntakeReplayTests: XCTestCase {
             intake.enqueue(
                 .axWindow(.windowMiniaturized(
                     pid: 9_001,
-                    windowId: axRef.windowId,
+                    axRef: axRef,
                     callbackGeneration: nil
                 ))
             )
         }
+        intake.enqueue(
+            .axWindow(.windowDeminiaturized(
+                pid: 9_001,
+                axRef: axRef,
+                callbackGeneration: nil
+            ))
+        )
 
         let queued = try XCTUnwrap(intake.performanceSnapshot())
-        XCTAssertEqual(queued.acceptedEvents, 20)
+        XCTAssertEqual(queued.acceptedEvents, 21)
         XCTAssertEqual(queued.coalescedEvents, 4)
         XCTAssertEqual(queued.deliveredEvents, 0)
-        XCTAssertEqual(queued.currentQueueDepth, 16)
-        XCTAssertEqual(queued.maximumQueueDepth, 16)
+        XCTAssertEqual(queued.currentQueueDepth, 17)
+        XCTAssertEqual(queued.maximumQueueDepth, 17)
 
         intake.drainNow()
 
         let snapshot = try XCTUnwrap(intake.endPerformanceCapture())
-        XCTAssertEqual(snapshot.acceptedEvents, 20)
+        XCTAssertEqual(snapshot.acceptedEvents, 21)
         XCTAssertEqual(snapshot.coalescedEvents, 4)
-        XCTAssertEqual(snapshot.deliveredEvents, 16)
+        XCTAssertEqual(snapshot.deliveredEvents, 17)
         XCTAssertEqual(snapshot.drainBatches, 1)
         XCTAssertEqual(snapshot.currentQueueDepth, 0)
-        XCTAssertEqual(snapshot.maximumQueueDepth, 16)
-        XCTAssertEqual(snapshot.maximumBatchSize, 16)
+        XCTAssertEqual(snapshot.maximumQueueDepth, 17)
+        XCTAssertEqual(snapshot.maximumBatchSize, 17)
         XCTAssertEqual(
             snapshot.cgsCreatedEvents,
             .init(acceptedEvents: 1, coalescedEvents: 0, deliveredEvents: 1)
@@ -262,7 +269,7 @@ final class EventIntakeReplayTests: XCTestCase {
         )
         XCTAssertEqual(
             snapshot.axLifecycleEvents,
-            .init(acceptedEvents: 3, coalescedEvents: 0, deliveredEvents: 3)
+            .init(acceptedEvents: 4, coalescedEvents: 0, deliveredEvents: 4)
         )
         XCTAssertEqual(
             snapshot.axFocusedWindowChangedEvents,

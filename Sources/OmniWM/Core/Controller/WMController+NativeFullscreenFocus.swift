@@ -12,7 +12,7 @@ extension WMController {
             traceNativeFullscreenActivationRejected(record, reason: .entryMissing)
             return
         }
-        guard !isManagedWindowSuppressedByMacOSHide(currentToken) else {
+        guard !isManagedWindowSuppressedByMacOS(currentToken) else {
             traceNativeFullscreenActivationRejected(record, reason: .appHidden)
             return
         }

@@ -103,7 +103,7 @@ extension LayoutRefreshController {
         guard !isWindowOnKnownInactiveNativeSpace(entry.windowId) else { return nil }
         guard entry.mode == .floating,
               entry.layoutReason == .standard,
-              !controller.workspaceManager.isAppHidden(pid: entry.pid),
+              !controller.workspaceManager.isWindowSuppressedByMacOS(entry.token),
               controller.workspaceManager.hiddenState(for: entry.token)?.workspaceInactive == true
         else {
             return nil

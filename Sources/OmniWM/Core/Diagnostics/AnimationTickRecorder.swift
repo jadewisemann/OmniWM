@@ -14,6 +14,10 @@ enum AnimationTickTrace {
         let dwindleMs: Double
         let closingMs: Double
         let reconcileMs: Double
+        let surfaceMs: Double
+        let transactionScopeMs: Double
+        let idleStopMs: Double
+        let parkAuditMs: Double
         let classification: DisplayTickClassification
 
         init(
@@ -25,6 +29,10 @@ enum AnimationTickTrace {
             dwindleMs: Double,
             closingMs: Double,
             reconcileMs: Double,
+            surfaceMs: Double,
+            transactionScopeMs: Double,
+            idleStopMs: Double,
+            parkAuditMs: Double,
             classification: DisplayTickClassification
         ) {
             self.mediaTime = mediaTime
@@ -35,6 +43,10 @@ enum AnimationTickTrace {
             self.dwindleMs = dwindleMs
             self.closingMs = closingMs
             self.reconcileMs = reconcileMs
+            self.surfaceMs = surfaceMs
+            self.transactionScopeMs = transactionScopeMs
+            self.idleStopMs = idleStopMs
+            self.parkAuditMs = parkAuditMs
             self.classification = classification
         }
     }
@@ -45,7 +57,8 @@ enum AnimationTickTrace {
     ) { record in
         let timing = String(
             format: "interval=%.2fms expected=%.2fms entry_slack=%.2fms completion_slack=%.2fms"
-                + " scroll=%.2fms dwindle=%.2fms closing=%.2fms reconcile=%.2fms total=%.2fms",
+                + " scroll=%.2fms dwindle=%.2fms closing=%.2fms reconcile=%.2fms total=%.2fms"
+                + " surface=%.3fms transaction_scope=%.3fms idle_stop=%.3fms park_audit=%.3fms",
             record.timing.intervalMs,
             record.timing.expectedMs,
             record.timing.entrySlackMs,
@@ -54,7 +67,11 @@ enum AnimationTickTrace {
             record.dwindleMs,
             record.closingMs,
             record.reconcileMs,
-            record.timing.workMs
+            record.timing.workMs,
+            record.surfaceMs,
+            record.transactionScopeMs,
+            record.idleStopMs,
+            record.parkAuditMs
         )
         let flags = [
             record.classification.longTimestampGap ? " LONG_GAP" : "",

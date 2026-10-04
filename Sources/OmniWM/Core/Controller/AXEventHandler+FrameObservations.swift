@@ -5,11 +5,96 @@ import AppKit
 import Foundation
 
 extension AXEventHandler {
+    struct FrameObservation {
+        let generation: UInt64
+        let hiddenState: HiddenState?
+        let task: Task<Void, Never>
+        var needsRequery = false
+    }
+
+    struct FrameObservations {
+        var query: @MainActor (UInt32) async throws -> WindowServerInfo? = {
+            try await SkyLight.shared.queryWindowInfoDeferred(windowIds: [$0])?[$0]
+        }
+
+        var byWindowId: [UInt32: FrameObservation] = [:]
+        var nextGeneration: UInt64 = 1
+    }
+
     func handleFrameChanged(windowId: UInt32) {
-        guard let controller else { return }
-        guard !controller.isOwnedWindow(windowNumber: Int(windowId)) else { return }
-        if shouldIgnoreScrollingFrameChange(windowId, controller: controller) { return }
-        guard case let .exact(windowServerToken, windowInfo) = resolveWindowServerIdentity(windowId) else { return }
+        guard let controller, !controller.isOwnedWindow(windowNumber: Int(windowId)) else { return }
+        let trackedEntry = controller.workspaceManager.entry(forWindowId: Int(windowId))
+        if shouldIgnoreScrollingFrameChange(trackedEntry, controller: controller) { return }
+        if controller.mouseEventHandler.tracksNativeTitleBarDrag(windowId: Int(windowId)) {
+            cancelFrameObservation(windowId: windowId)
+            applyFrameChange(
+                windowId: windowId,
+                identity: resolveWindowServerIdentity(windowId),
+                controller: controller
+            )
+        } else if frameObservations.byWindowId[windowId] != nil {
+            frameObservations.byWindowId[windowId]?.needsRequery = true
+        } else {
+            startFrameObservation(windowId: windowId, hiddenState: trackedEntry?.hiddenState)
+        }
+    }
+
+    func cancelFrameObservation(windowId: UInt32) {
+        frameObservations.byWindowId.removeValue(forKey: windowId)?.task.cancel()
+    }
+
+    func cancelFrameObservations() {
+        for observation in frameObservations.byWindowId.values {
+            observation.task.cancel()
+        }
+        frameObservations.byWindowId.removeAll()
+    }
+
+    private func startFrameObservation(windowId: UInt32, hiddenState: HiddenState?) {
+        let generation = frameObservations.nextGeneration
+        frameObservations.nextGeneration &+= 1
+        let query = frameObservations.query
+        let task = Task { @MainActor [weak self] in
+            let info = try? await query(windowId)
+            self?.completeFrameObservation(windowId: windowId, generation: generation, info: info)
+        }
+        frameObservations.byWindowId[windowId] = FrameObservation(
+            generation: generation,
+            hiddenState: hiddenState,
+            task: task
+        )
+    }
+
+    private func completeFrameObservation(windowId: UInt32, generation: UInt64, info: WindowServerInfo?) {
+        guard let observation = frameObservations.byWindowId[windowId],
+              observation.generation == generation
+        else { return }
+        frameObservations.byWindowId[windowId] = nil
+        guard let controller, !controller.isOwnedWindow(windowNumber: Int(windowId)) else { return }
+        let trackedEntry = controller.workspaceManager.entry(forWindowId: Int(windowId))
+        if shouldIgnoreScrollingFrameChange(trackedEntry, controller: controller) { return }
+        let isCurrent = trackedEntry?.hiddenState == observation.hiddenState
+        if isCurrent {
+            applyFrameChange(
+                windowId: windowId,
+                identity: WindowServerIdentityResolution(windowId: windowId, info: info),
+                controller: controller
+            )
+        }
+        if !isCurrent || observation.needsRequery {
+            startFrameObservation(
+                windowId: windowId,
+                hiddenState: controller.workspaceManager.entry(forWindowId: Int(windowId))?.hiddenState
+            )
+        }
+    }
+
+    private func applyFrameChange(
+        windowId: UInt32,
+        identity: WindowServerIdentityResolution,
+        controller: WMController
+    ) {
+        guard case let .exact(windowServerToken, windowInfo) = identity else { return }
         if retryAdmissionForFrameChange(windowId: windowId, windowServerToken: windowServerToken) { return }
         guard let entry = controller.workspaceManager.entry(for: windowServerToken) else { return }
         if entry.mode == .tiling,
@@ -17,7 +102,7 @@ extension AXEventHandler {
         {
             return
         }
-        if repairInactiveWorkspaceFrame(entry, windowInfo: windowInfo, controller: controller) { return }
+        if repairParkedWindowFrame(entry, windowInfo: windowInfo, controller: controller) { return }
         let focusedObservedFrame = observedFrameForFocusedFrameChange(
             windowId: windowId,
             windowServerToken: windowServerToken,
@@ -37,19 +122,23 @@ extension AXEventHandler {
         return false
     }
 
-    private func repairInactiveWorkspaceFrame(
+    private func repairParkedWindowFrame(
         _ entry: WindowState,
         windowInfo: WindowServerInfo,
         controller: WMController
     ) -> Bool {
-        if controller.workspaceManager.hiddenState(for: entry.token)?.workspaceInactive == true {
-            controller.layoutRefreshController.repairWorkspaceInactivePark(
+        guard let hiddenState = controller.workspaceManager.hiddenState(for: entry.token) else { return false }
+        let observedFrame = ScreenCoordinateSpace.toAppKit(rect: windowInfo.frame)
+        if hiddenState.workspaceInactive {
+            controller.layoutRefreshController.repairWorkspaceInactivePark(for: entry, observedFrame: observedFrame)
+        } else if let side = hiddenState.offscreenSide {
+            controller.layoutRefreshController.repairLayoutTransientPark(
                 for: entry,
-                observedFrame: ScreenCoordinateSpace.toAppKit(rect: windowInfo.frame)
+                side: side,
+                observedFrame: observedFrame
             )
-            return true
         }
-        return false
+        return true
     }
 
     private func applyObservedFrameChange(
@@ -155,9 +244,10 @@ extension AXEventHandler {
         observedFrame(for: entry.axRef)
     }
 
-    private func shouldIgnoreScrollingFrameChange(_ windowId: UInt32, controller: WMController) -> Bool {
-        if let trackedEntry = controller.workspaceManager.entry(forWindowId: Int(windowId)),
+    private func shouldIgnoreScrollingFrameChange(_ trackedEntry: WindowState?, controller: WMController) -> Bool {
+        if let trackedEntry,
            trackedEntry.mode == .tiling,
+           trackedEntry.hiddenState == nil,
            controller.niriLayoutHandler.hasScrollAnimation(for: trackedEntry.workspaceId)
         {
             return true

@@ -32,22 +32,23 @@ struct IPCWindowQueryProjection {
 
     func result() -> IPCWindowsQueryResult {
         let windows = IPCQuerySelection.orderedWorkspaces(controller: controller).flatMap { workspace in
-            WorkspaceEntryOrdering.orderedEntries(
+            let topology = controller.workspaceManager.layoutTopology(for: workspace.id)
+            return WorkspaceEntryOrdering.orderedEntries(
                 controller.workspaceManager.entries(in: workspace.id),
-                topology: controller.workspaceManager.layoutTopology(for: workspace.id)
+                topology: topology
             )
             .filter { entry in
                 matchesWindowQuery(entry)
             }
             .map { entry in
-                windowSnapshot(from: entry)
+                windowSnapshot(from: entry, isFullscreen: topology.isFullscreen(entry.token))
             }
         }
 
         return IPCWindowsQueryResult(windows: windows)
     }
 
-    private func windowSnapshot(from entry: WindowState) -> IPCWindowQuerySnapshot {
+    private func windowSnapshot(from entry: WindowState, isFullscreen: Bool) -> IPCWindowQuerySnapshot {
         let workspaceDescriptor = controller.workspaceManager.descriptor(for: entry.workspaceId)
         let monitor = controller.workspaceManager.monitor(for: entry.workspaceId)
         let appInfo = controller.appInfoCache.info(for: entry.pid)
@@ -85,13 +86,19 @@ struct IPCWindowQueryProjection {
                 .map(IPCManualWindowOverride.init(override:))
                 : nil,
             isFocused: IPCQuerySelection.include("is-focused", in: fields) ? (entry.token == focusedToken) : nil,
+            isFullscreen: IPCQuerySelection.include("is-fullscreen", in: fields) ? isFullscreen : nil,
             isVisible: IPCQuerySelection.include("is-visible", in: fields) ? isVisible : nil,
             isAppHidden: IPCQuerySelection.include("is-app-hidden", in: fields) ? isAppHidden : nil,
             isScratchpad: IPCQuerySelection.include("is-scratchpad", in: fields) ? scratchpadIndex != nil : nil,
             scratchpadIndex: IPCQuerySelection.include("scratchpad-index", in: fields) ? scratchpadIndex?
                 .rawValue : nil,
-            hiddenReason: IPCQuerySelection.include("hidden-reason", in: fields) ? hiddenState
-                .map(IPCHiddenReason.init(hiddenState:)) : nil
+            hiddenReason: IPCQuerySelection.include("hidden-reason", in: fields) ? hiddenState.map { hiddenState in
+                IPCHiddenReason(
+                    hiddenState: hiddenState,
+                    isInactiveTabMember: hiddenState.offscreenSide != nil
+                        && controller.workspaceManager.isInactiveTabMember(entry.token, in: entry.workspaceId)
+                )
+            } : nil
         )
     }
 
@@ -173,7 +180,8 @@ struct IPCWindowQueryProjection {
     ) -> Bool {
         guard visibleWorkspaceIds.contains(entry.workspaceId),
               hiddenState == nil,
-              !isAppHidden
+              !isAppHidden,
+              !entry.observedState.isMinimized
         else {
             return false
         }

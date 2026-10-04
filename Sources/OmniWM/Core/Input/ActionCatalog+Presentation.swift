@@ -37,6 +37,8 @@ extension ActionCatalog {
                 binding: KeyBinding(keyCode: UInt32(kVK_ANSI_M), modifiers: UInt32(controlKey | optionKey)),
                 keywords: ["menu", "anywhere"]
             ),
+            setWindowMarkActionSpec,
+            removeWindowMarkActionSpec,
             IPCPresentationCommand.workspaceBar.actionSpec(),
             IPCPresentationCommand.hiddenBar.actionSpec(),
             IPCPresentationCommand.quakeTerminal.actionSpec(),
@@ -50,5 +52,25 @@ extension ActionCatalog {
             IPCPresentationCommand.overview.actionSpec(),
             IPCPresentationCommand.systemStats.actionSpec()
         ])
+    }
+
+    private static var setWindowMarkActionSpec: ActionSpec {
+        action(
+            id: "setWindowMark",
+            command: .windowMark(.set),
+            category: .focus,
+            binding: .unassigned,
+            keywords: ["mark", "tag", "name", "focused window"]
+        )
+    }
+
+    private static var removeWindowMarkActionSpec: ActionSpec {
+        action(
+            id: "removeWindowMark",
+            command: .windowMark(.remove),
+            category: .focus,
+            binding: .unassigned,
+            keywords: ["mark", "tag", "remove", "focused window"]
+        )
     }
 }

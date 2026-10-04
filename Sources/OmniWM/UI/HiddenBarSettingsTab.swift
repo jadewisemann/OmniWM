@@ -69,11 +69,10 @@ struct HiddenBarSettingsTab: View {
 
                 if controller.isHiddenBarHidingAvailable {
                     SettingsCaption(
-                        "Hides the selected menu-bar items while enabled. "
-                            + "Click an icon in the hidden icons bar to reveal it temporarily."
+                        localized: "Hides the selected menu-bar items while enabled. Click an icon in the hidden icons bar to reveal it temporarily."
                     )
                 } else {
-                    SettingsCaption("Hiding requires macOS 27 or later.")
+                    SettingsCaption(localized: "Hiding requires macOS 27 or later.")
                 }
             }
 
@@ -85,10 +84,15 @@ struct HiddenBarSettingsTab: View {
             }
         }
         .formStyle(.grouped)
-        .task {
+        .task(id: settings.hiddenBar.enabled) {
+            guard settings.hiddenBar.enabled else {
+                detectedApps = []
+                isDetectingApps = false
+                return
+            }
             isDetectingApps = true
             let apps = await controller.detectMenuBarApps()
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, settings.hiddenBar.enabled else { return }
             detectedApps = apps
             isDetectingApps = false
         }
@@ -99,7 +103,7 @@ struct HiddenBarSettingsTab: View {
             if isDetectingApps {
                 ProgressView("Detecting menu-bar apps…")
             } else if rows.isEmpty {
-                SettingsCaption("No menu-bar apps detected.")
+                SettingsCaption(localized: "No menu-bar apps detected.")
             } else {
                 ForEach(rows) { row in
                     Toggle(isOn: binding(for: row.bundleID)) {
@@ -121,17 +125,18 @@ struct HiddenBarSettingsTab: View {
     private var panelSection: some View {
         Section("Hidden Icons Bar") {
             SettingsCaption(
-                "Right-click or Option-click the OmniWM menu-bar icon to show the hidden icons "
-                    + "below the workspace bar. Click an icon to open its menu."
+                localized: "Right-click or Option-click the OmniWM menu-bar icon to show the hidden icons below the workspace bar. Click an icon to open its menu."
             )
             SettingsSliderRow(
-                label: "Rehide Delay",
+                label: String(localized: "Rehide Delay"),
                 value: rehideIntervalBinding,
                 range: 2 ... 30,
                 step: 1,
-                valueText: "\(Int(settings.hiddenBar.rehideIntervalSeconds)) s"
+                valueText: String(localized: "\(Int(settings.hiddenBar.rehideIntervalSeconds)) s")
             )
-            SettingsCaption("How long a clicked icon stays revealed. The countdown pauses while its menu is open.")
+            SettingsCaption(
+                localized: "How long a clicked icon stays revealed. The countdown pauses while its menu is open."
+            )
         }
     }
 

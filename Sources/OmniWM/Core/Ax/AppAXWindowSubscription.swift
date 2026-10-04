@@ -11,17 +11,20 @@ struct AppAXWindowNotificationSet: OptionSet, Sendable {
 
     static let destroyed = Self(rawValue: 1 << 0)
     static let miniaturized = Self(rawValue: 1 << 1)
-    static let lifecycle: Self = [.destroyed, .miniaturized]
+    static let deminiaturized = Self(rawValue: 1 << 2)
+    static let lifecycle: Self = [.destroyed, .miniaturized, .deminiaturized]
 }
 
 enum AppAXWindowNotification: CaseIterable, Hashable, Sendable {
     case destroyed
     case miniaturized
+    case deminiaturized
 
     var ownership: AppAXWindowNotificationSet {
         switch self {
         case .destroyed: .destroyed
         case .miniaturized: .miniaturized
+        case .deminiaturized: .deminiaturized
         }
     }
 
@@ -29,6 +32,7 @@ enum AppAXWindowNotification: CaseIterable, Hashable, Sendable {
         switch self {
         case .destroyed: kAXUIElementDestroyedNotification as CFString
         case .miniaturized: kAXWindowMiniaturizedNotification as CFString
+        case .deminiaturized: kAXWindowDeminiaturizedNotification as CFString
         }
     }
 }

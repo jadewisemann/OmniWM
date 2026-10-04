@@ -29,7 +29,7 @@ struct AppAXClosingFrameExecution: Sendable {
                 request,
                 generations: generations,
                 isCancelled: {
-                    job.isCancelled || suppression.isHardSuppressed()
+                    job.isCancelled || suppression.isHardSuppressed(for: request.target.windowId)
                 }
             )
             generations.removeIfCurrent(

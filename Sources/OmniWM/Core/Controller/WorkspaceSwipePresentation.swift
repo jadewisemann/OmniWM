@@ -28,6 +28,7 @@ final class WorkspaceSwipePresentation {
         let preparation: Preparation
         let destination: Workspace
         let affectedWorkspaces: Set<WorkspaceDescriptor.ID>
+        let focusOrigin: ManagedFocusOrigin
         let onActivated: @MainActor () -> Void
         let inputSign: Double
         let visualSign: CGFloat
@@ -48,11 +49,13 @@ final class WorkspaceSwipePresentation {
             timestamp: TimeInterval,
             recognitionMovement: SwipeEvent?,
             affectedWorkspaces: Set<WorkspaceDescriptor.ID> = [],
+            focusOrigin: ManagedFocusOrigin = .keyboardOrProgrammatic,
             onActivated: @escaping @MainActor () -> Void = {}
         ) {
             self.preparation = preparation
             self.destination = destination
             self.affectedWorkspaces = affectedWorkspaces
+            self.focusOrigin = focusOrigin
             self.onActivated = onActivated
             inputSign = cumulative < 0 ? -1 : 1
             visualSign = isNext ? 1 : -1
@@ -233,7 +236,10 @@ final class WorkspaceSwipePresentation {
         cancelPendingSwitch(reason: "preparation-stopped")
         preparation = nil
         preview?.stop()
-        if warm { warmPreviews() }
+        if warm {
+            refreshController?.collectUnusedWorkspacesIfIdle()
+            warmPreviews()
+        }
     }
 
     @discardableResult
@@ -241,6 +247,7 @@ final class WorkspaceSwipePresentation {
         to destinationWorkspaceId: WorkspaceDescriptor.ID,
         on monitorId: Monitor.ID,
         affectedWorkspaces: Set<WorkspaceDescriptor.ID> = [],
+        focusOrigin: ManagedFocusOrigin = .keyboardOrProgrammatic,
         onActivated: @escaping @MainActor () -> Void = {},
         onFallback: @escaping @MainActor () -> Void
     ) -> Bool {
@@ -266,6 +273,7 @@ final class WorkspaceSwipePresentation {
             timestamp: mediaTimeProvider(),
             recognitionMovement: nil,
             affectedWorkspaces: affectedWorkspaces,
+            focusOrigin: focusOrigin,
             onActivated: onActivated
         )
         let pending = PendingSwitch(
@@ -423,7 +431,10 @@ final class WorkspaceSwipePresentation {
         trace(reason, progress: flight.progress)
         controller?.surfaceReconciler.noteWorldChanged()
         refreshController?.stopDisplayLinkIfIdle(for: flight.preparation.monitor.displayId)
-        if reason == "completed" || reason == "placement-failed" || reason == "cancelled" { warmPreviews() }
+        if reason == "completed" || reason == "placement-failed" || reason == "cancelled" {
+            refreshController?.collectUnusedWorkspacesIfIdle()
+            warmPreviews()
+        }
     }
 
     func checkSettlement() {
@@ -464,6 +475,7 @@ final class WorkspaceSwipePresentation {
         trace("committed", progress: flight.progress)
         controller.workspaceNavigationHandler.commitWorkspaceTransitionFocusHandoff(
             targetWorkspaceId: flight.destination.id, monitor: flight.preparation.monitor, startScrollAnimation: false,
+            focusOrigin: flight.focusOrigin,
             affectedWorkspaces: flight.affectedWorkspaces,
             placementSubmitted: { [weak self, weak flight] in
                 guard let self, let flight, self.flight === flight else { return }
@@ -480,6 +492,10 @@ final class WorkspaceSwipePresentation {
 }
 
 extension WorkspaceSwipePresentation {
+    func windowRemoved(_ token: WindowToken) {
+        preview?.remove(token: token)
+    }
+
     func previewSurface(_ controller: WMController) -> WorkspaceSwipePreview {
         if let preview {
             preview.onDepartureFinished = { [weak self] in self?.warmPreviews() }

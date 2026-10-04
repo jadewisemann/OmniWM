@@ -24,6 +24,27 @@ enum LayoutCompatibility: String {
     case shared = "Shared"
     case niri = "Niri"
     case dwindle = "Dwindle"
+
+    var localizedDisplayName: String {
+        Self.localizedNames[self] ?? rawValue
+    }
+
+    private static let localizedNames: [LayoutCompatibility: String] = [
+        .shared: String(localized: LocalizedStringResource(
+            "command.scope.shared", defaultValue: "Shared", table: "Commands", bundle: .omniWM
+        )),
+        .niri: String(localized: LocalizedStringResource(
+            "command.scope.niri", defaultValue: "Niri", table: "Commands", bundle: .omniWM
+        )),
+        .dwindle: String(localized: LocalizedStringResource(
+            "command.scope.dwindle", defaultValue: "Dwindle", table: "Commands", bundle: .omniWM
+        ))
+    ]
+}
+
+enum WindowMarkHotkeyAction: Equatable, Hashable {
+    case set
+    case remove
 }
 
 enum HotkeyCommand: Equatable, Hashable {
@@ -40,6 +61,7 @@ enum HotkeyCommand: Equatable, Hashable {
     case windowState(IPCWindowStateCommand)
 
     case openMenuAnywhere
+    case windowMark(WindowMarkHotkeyAction)
 
     case presentation(IPCPresentationCommand)
     case focusNavigation(FocusNavigationAction)
@@ -54,7 +76,14 @@ enum HotkeyCommand: Equatable, Hashable {
         ActionCatalog.title(for: self) ?? String(describing: self)
     }
 
+    var localizedDisplayName: String {
+        ActionCatalog.localizedTitle(for: self) ?? displayName
+    }
+
     var layoutCompatibility: LayoutCompatibility {
-        ActionCatalog.layoutCompatibility(for: self) ?? .shared
+        if case let .sizing(action) = self {
+            return action.compatibility
+        }
+        return ActionCatalog.layoutCompatibility(for: self) ?? .shared
     }
 }

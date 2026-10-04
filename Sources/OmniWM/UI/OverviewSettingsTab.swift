@@ -11,9 +11,16 @@ struct OverviewSettingsTab: View {
 
     var body: some View {
         Form {
+            Section("Overview") {
+                Toggle("Enable Overview", isOn: Binding(
+                    get: { settings.overview.enabled },
+                    set: { controller.setOverviewEnabled($0) }
+                ))
+            }
+
             Section("Layout") {
                 SettingsSliderRow(
-                    label: "Zoom",
+                    label: String(localized: "Zoom"),
                     value: Bindable(settings.overview).zoom,
                     range: 0.5 ... 1.5,
                     step: 0.05,
@@ -22,19 +29,20 @@ struct OverviewSettingsTab: View {
                 .onChange(of: settings.overview.zoom) { _, _ in
                     scheduleUpdate()
                 }
-                SettingsCaption("Zoom changes made in Overview are remembered when it closes.")
+                SettingsCaption(localized: "Zoom changes made in Overview are remembered when it closes.")
             }
+            .disabled(!settings.overview.enabled)
 
             Section("Input") {
                 Toggle("Invert Scrolling Direction", isOn: Bindable(settings.overview).invertScrollDirection)
                 SettingsSliderRow(
-                    label: "Mouse Wheel Speed",
+                    label: String(localized: "Mouse Wheel Speed"),
                     value: Bindable(settings.overview).mouseScrollSpeed,
                     range: 0.05 ... 2,
                     step: 0.05,
                     valueText: "\(Int((settings.overview.mouseScrollSpeed * 100).rounded()))%"
                 )
-                SettingsCaption("Adjusts mouse wheels. Trackpad scrolling keeps its normal speed.")
+                SettingsCaption(localized: "Adjusts mouse wheels. Trackpad scrolling keeps its normal speed.")
                 Picker("Toggle Overview Mouse Button", selection: Binding(
                     get: { settings.overview.mouseButton },
                     set: { button in
@@ -52,11 +60,14 @@ struct OverviewSettingsTab: View {
                             .disabled(settings.systemHyperTrigger.mouseButtonNumber == button)
                     }
                 }
-                SettingsCaption("Press to open or close Overview. Buttons assigned to System Hyper are unavailable.")
+                SettingsCaption(
+                    localized: "Press to open or close Overview. Buttons assigned to System Hyper are unavailable."
+                )
                 if let mouseButtonError {
                     SettingsCaption(mouseButtonError)
                 }
             }
+            .disabled(!settings.overview.enabled)
 
             Section("Appearance") {
                 ColorPicker(
@@ -85,6 +96,7 @@ struct OverviewSettingsTab: View {
                 )
                 .disabled(settings.overview.matchFocusBorder)
             }
+            .disabled(!settings.overview.enabled)
         }
         .formStyle(.grouped)
     }

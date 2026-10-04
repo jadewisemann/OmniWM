@@ -8,7 +8,8 @@ import QuartzCore
 extension NiriLayoutEngine {
     func correctViewportAfterColumnRemoval(
         context: NiriInteractionContext,
-        state: inout ViewportState
+        state: inout ViewportState,
+        preservesCenteredView: Bool = false
     ) -> Bool {
         let cols = columns(in: context.workspaceId)
         guard !cols.isEmpty else { return false }
@@ -49,7 +50,10 @@ extension NiriLayoutEngine {
                 centerMode: settings.centerFocusedColumn, centerSingle: settings.alwaysCenterSingleColumn
             )
         }
-        return fitRemovalViewport(viewport, context: context, state: &state, centerMode: settings.centerFocusedColumn)
+        return fitRemovalViewport(
+            viewport, context: context, state: &state,
+            centerMode: settings.centerFocusedColumn, preservesCenteredView: preservesCenteredView
+        )
     }
 
     private struct RemovalViewport {
@@ -84,7 +88,7 @@ extension NiriLayoutEngine {
 
     private func fitRemovalViewport(
         _ viewport: RemovalViewport, context: NiriInteractionContext, state: inout ViewportState,
-        centerMode: CenterFocusedColumn
+        centerMode: CenterFocusedColumn, preservesCenteredView: Bool
     ) -> Bool {
         let totalSpan = state.totalSpan(
             containers: viewport.columns,
@@ -98,7 +102,9 @@ extension NiriLayoutEngine {
         ))
         guard abs(clampedStart - viewport.viewStart) > 0.5 else { return false }
 
-        if centerMode == .onOverflow, preservesCenteredOverflow(viewport, context: context, state: state) {
+        if preservesCenteredView || (centerMode == .onOverflow && adjacentPairOverflows(viewport, context: context)),
+           isCenteredOnActiveColumn(viewport, context: context, state: state)
+        {
             return false
         }
 
@@ -121,7 +127,7 @@ extension NiriLayoutEngine {
         return true
     }
 
-    private func preservesCenteredOverflow(
+    private func isCenteredOnActiveColumn(
         _ viewport: RemovalViewport, context: NiriInteractionContext, state: ViewportState
     ) -> Bool {
         let centeredOffset = state.computeVisibleOffset(
@@ -133,16 +139,18 @@ extension NiriLayoutEngine {
             scale: viewport.scale,
             viewFrame: viewport.viewFrame
         )
-        let centeredStart = viewport.activePosition + centeredOffset
-        let activeSpan = viewport.columns[viewport.activeIndex][keyPath: context.orientation.settledSpanKeyPath]
+        return abs(viewport.activePosition + centeredOffset - viewport.viewStart) <= 0.5
+    }
+
+    private func adjacentPairOverflows(_ viewport: RemovalViewport, context: NiriInteractionContext) -> Bool {
+        let spanKeyPath = context.orientation.settledSpanKeyPath
+        let activeSpan = viewport.columns[viewport.activeIndex][keyPath: spanKeyPath]
         let previousPairOverflows = viewport.activeIndex > 0
-            && viewport
-            .columns[viewport.activeIndex - 1][keyPath: context.orientation.settledSpanKeyPath] + activeSpan +
-            context.gaps * 3 > viewport.span
+            && viewport.columns[viewport.activeIndex - 1][keyPath: spanKeyPath] + activeSpan + context.gaps * 3
+            > viewport.span
         let nextPairOverflows = viewport.activeIndex + 1 < viewport.columns.count
-            && activeSpan + viewport
-            .columns[viewport.activeIndex + 1][keyPath: context.orientation.settledSpanKeyPath] + context
-            .gaps * 3 > viewport.span
-        return (previousPairOverflows || nextPairOverflows) && abs(centeredStart - viewport.viewStart) <= 0.5
+            && activeSpan + viewport.columns[viewport.activeIndex + 1][keyPath: spanKeyPath] + context.gaps * 3
+            > viewport.span
+        return previousPairOverflows || nextPairOverflows
     }
 }

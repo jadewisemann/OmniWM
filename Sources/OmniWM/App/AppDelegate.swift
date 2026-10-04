@@ -72,6 +72,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var launchOverlayFinished = false
     private var launchPermissionsWindowController: LaunchPermissionsWindowController?
     private var didFinishBootstrap = false
+    private var terminationPending = false
 
     public func applicationDidFinishLaunching(_: Notification) {
         NSApplication.shared.setActivationPolicy(.accessory)
@@ -79,14 +80,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         bootstrapApplication()
     }
 
-    public func applicationShouldTerminate(_: NSApplication) -> NSApplication.TerminateReply {
-        return .terminateNow
-    }
-
     public func applicationWillTerminate(_: Notification) {
         statusBarController?.cleanup()
         if let controller = AppDelegate.sharedBootstrap?.controller {
-            controller.serviceLifecycleManager.stop()
+            if !terminationPending { controller.serviceLifecycleManager.stop() }
             controller.workspaceManager.flushPersistedWindowRestoreCatalogNow()
         }
         AppDelegate.sharedBootstrap?.settings?.flushNow()
@@ -181,7 +178,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             try setIPCEnabled(settings.ipcEnabled, controller: controller)
         } catch {
             presentInfoAlert(
-                title: "IPC Failed to Start",
+                title: String(localized: "IPC Failed to Start"),
                 message: error.localizedDescription
             )
             settings.ipcEnabled = false
@@ -199,7 +196,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 try self.setIPCEnabled(isEnabled, controller: controller)
             } catch {
                 self.presentInfoAlert(
-                    title: "IPC Failed to Start",
+                    title: String(localized: "IPC Failed to Start"),
                     message: error.localizedDescription
                 )
                 if isEnabled {
@@ -330,25 +327,24 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.alertStyle = .warning
         switch reason {
         case let .conflicts(conflicts):
-            alert.messageText = "Conflicting Window Managers Detected"
-            alert.informativeText =
-                "OmniWM has not started. Quit these window managers or stop their background services. "
-                    + "OmniWM continues automatically once they are gone, or click Check Again:\n\n"
-                    + conflicts.map { "• \($0.displayName)" }.joined(separator: "\n")
+            alert.messageText = String(localized: "Conflicting Window Managers Detected")
+            let conflictList = conflicts.map { "• \($0.displayName)" }.joined(separator: "\n")
+            alert.informativeText = String(localized:
+                "OmniWM has not started. Quit these window managers or stop their background services. OmniWM continues automatically once they are gone, or click Check Again:\n\n\(conflictList)"
+            )
         case let .unidentifiedProcess(pid):
-            alert.messageText = "Couldn’t Identify a Running Process"
-            alert.informativeText =
-                "OmniWM has not started because it could not identify process \(pid) "
-                    + "(see `ps -p \(pid)`). It retries every second; click Check Again to retry now, "
-                    + "or quit OmniWM."
+            alert.messageText = String(localized: "Couldn’t Identify a Running Process")
+            alert.informativeText = String(localized:
+                "OmniWM has not started because it could not identify process \(pid) (see `ps -p \(pid)`). It retries every second; click Check Again to retry now, or quit OmniWM."
+            )
         case .scanUnavailable:
-            alert.messageText = "Couldn’t Check Running Processes"
-            alert.informativeText =
-                "OmniWM has not started because it could not safely inspect every running process. "
-                    + "It retries every second; click Check Again to retry now, or quit OmniWM."
+            alert.messageText = String(localized: "Couldn’t Check Running Processes")
+            alert.informativeText = String(localized:
+                "OmniWM has not started because it could not safely inspect every running process. It retries every second; click Check Again to retry now, or quit OmniWM."
+            )
         }
-        alert.addButton(withTitle: "Check Again")
-        alert.addButton(withTitle: "Quit OmniWM")
+        alert.addButton(withTitle: String(localized: "Check Again"))
+        alert.addButton(withTitle: String(localized: "Quit OmniWM"))
         alert.buttons.last?.keyEquivalent = "\u{1b}"
         NSApplication.shared.activate(ignoringOtherApps: true)
         let autoRecheck = LaunchConflictAutoRecheck(scan: rescan) {
@@ -372,8 +368,58 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.alertStyle = .informational
         alert.messageText = title
         alert.informativeText = message
-        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: String(localized: "OK"))
         NSApplication.shared.activate(ignoringOtherApps: true)
         _ = alert.runModal()
+    }
+
+    private func confirmQuitWithoutSavingClipboardHistory(_ error: Error) -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = String(localized: "Clipboard History Could Not Be Saved")
+        alert.informativeText = String(localized:
+            "\(error.localizedDescription)\n\nQuit anyway? Unsaved clipboard history will be lost."
+        )
+        alert.addButton(withTitle: String(localized: "Keep OmniWM Open"))
+        alert.addButton(withTitle: String(localized: "Quit Without Saving"))
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        return alert.runModal() == .alertSecondButtonReturn
+    }
+}
+
+extension AppDelegate {
+    public func applicationShouldTerminate(_ application: NSApplication) -> NSApplication.TerminateReply {
+        guard let controller = AppDelegate.sharedBootstrap?.controller else { return .terminateNow }
+        return deferTermination(
+            stop: { completion in
+                Task { @MainActor in
+                    do {
+                        try await controller.clipboardHistoryService.flushForQuit()
+                    } catch {
+                        if !self.confirmQuitWithoutSavingClipboardHistory(error) {
+                            controller.clipboardHistoryService.resumeAfterCanceledQuit()
+                            self.terminationPending = false
+                            application.reply(toApplicationShouldTerminate: false)
+                            return
+                        }
+                    }
+                    controller.serviceLifecycleManager.stopRestoringWindows(forQuit: true, completion: completion)
+                }
+            },
+            reply: {
+                controller.workspaceManager.flushPersistedWindowRestoreCatalogNow()
+                application.reply(toApplicationShouldTerminate: true)
+            }
+        )
+    }
+
+    func deferTermination(
+        stop: @escaping (@escaping @MainActor @Sendable () -> Void) -> Void,
+        reply: @escaping @MainActor @Sendable () -> Void
+    ) -> NSApplication.TerminateReply {
+        guard !terminationPending else { return .terminateLater }
+        terminationPending = true
+        Task { @MainActor in stop(reply) }
+        return .terminateLater
     }
 }

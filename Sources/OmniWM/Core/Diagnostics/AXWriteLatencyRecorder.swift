@@ -123,6 +123,7 @@ enum FrameEffectTraceContext {
 }
 
 struct AXFrameSetterTiming: Equatable, Sendable {
+    var preReadNs: UInt64 = 0
     var sizeNs: UInt64 = 0
     var positionNs: UInt64 = 0
     var verificationNs: UInt64 = 0
@@ -149,6 +150,7 @@ enum AXWriteLatencyTrace {
         let attempt: UInt8
         let count: Int
         let queueNs: UInt64
+        var preReadNs: UInt64 = 0
         let sizeNs: UInt64
         let positionNs: UInt64
         let verificationNs: UInt64
@@ -183,6 +185,7 @@ enum AXWriteLatencyTrace {
             return prefix
                 + " event=attempt win=\(record.windowId) attempt=\(record.attempt)"
                 + " queue_us=\(microseconds(record.queueNs))"
+                + " pre_read_us=\(microseconds(record.preReadNs))"
                 + " size_us=\(microseconds(record.sizeNs))"
                 + " position_us=\(microseconds(record.positionNs))"
                 + " verification_us=\(microseconds(record.verificationNs))"

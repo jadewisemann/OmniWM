@@ -133,7 +133,7 @@ extension MouseEventHandler {
     private func gestureFramePreconditionsSatisfied(at location: CGPoint) -> Bool {
         guard let controller else { return false }
         guard controller.isEnabled,
-              controller.settings.gestures.trackpadGesturesEnabled
+              controller.settings.effectiveTrackpadGesturesEnabled
         else {
             abortActiveGestureIfNeeded()
             return false

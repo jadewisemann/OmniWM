@@ -20,6 +20,7 @@ struct ObservedWindowState: Equatable {
     var monitorId: Monitor.ID?
     var isVisible: Bool
     var isNativeFullscreen: Bool
+    var isMinimized = false
 
     static func initial(
         workspaceId: WorkspaceDescriptor.ID,

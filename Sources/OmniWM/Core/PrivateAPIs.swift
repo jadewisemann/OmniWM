@@ -131,7 +131,7 @@ func makeKeyWindow(psn: inout ProcessSerialNumber, windowId: UInt32) -> Bool {
     return succeeded
 }
 
-func focusWindow(pid: pid_t, windowId: UInt32, windowRef _: AXUIElement) {
+func focusWindow(pid: pid_t, windowId: UInt32) {
     var psn = ProcessSerialNumber()
     guard getProcessForPID(pid, &psn) == noErr else {
         FallbackFiringRecorder.shared.note(.skylight, "getProcessForPIDFailed")

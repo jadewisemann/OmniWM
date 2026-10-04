@@ -48,6 +48,7 @@ extension WorkspaceNavigationHandler {
         targetWorkspaceId: WorkspaceDescriptor.ID,
         monitor: Monitor?,
         startScrollAnimation: Bool,
+        focusOrigin: ManagedFocusOrigin = .keyboardOrProgrammatic,
         affectedWorkspaces: Set<WorkspaceDescriptor.ID> = [],
         placementSubmitted: LayoutRefreshController.PostLayoutAction? = nil,
         placementInvalidated: LayoutRefreshController.PostLayoutAction? = nil
@@ -62,7 +63,7 @@ extension WorkspaceNavigationHandler {
         let handoffAction: LayoutRefreshController.PostLayoutAction = { [weak self, weak controller] in
             guard let controller else { return }
             if let focusToken = handoff.focusToken {
-                controller.focusWindow(focusToken)
+                controller.focusWindow(focusToken, origin: focusOrigin)
             } else if handoff.shouldClearManagedFocus {
                 self?.clearManagedFocusAfterEmptyWorkspaceSwitch()
             }

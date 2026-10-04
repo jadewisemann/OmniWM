@@ -42,7 +42,7 @@ final class SystemStatsSamplerTests: XCTestCase {
     }
 
     func testDashboardFormattingHelpers() {
-        XCTAssertEqual(SystemStatsView.percentText(0.246), "25%")
+        XCTAssertEqual(SystemStatsView.percentText(0.246, locale: Locale(identifier: "en_US_POSIX")), "25%")
         XCTAssertEqual(SystemStatsView.percentText(nil), "—")
         XCTAssertEqual(SystemStatsView.uptimeText(65), "1m")
         XCTAssertEqual(SystemStatsView.uptimeText(3665), "1h 1m")

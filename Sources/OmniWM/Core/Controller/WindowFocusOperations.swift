@@ -9,6 +9,8 @@ import OmniWMIPC
 struct WindowFocusOperations {
     let activateApp: (pid_t) -> Void
     let focusSpecificWindow: (pid_t, UInt32, AXUIElement) -> Void
+    let submitFocusSpecificWindow: (pid_t, UInt32, AXUIElement) -> Void
+    let afterSubmittedFocus: (@escaping @MainActor () -> Void) -> Void
     let deactivateSameAppWindow: (pid_t, UInt32) -> Bool
     let activateAndFocusSameAppWindow: (pid_t, UInt32, AXUIElement) -> Bool
     let raiseWindow: (AXUIElement) -> Void
@@ -18,6 +20,8 @@ struct WindowFocusOperations {
     init(
         activateApp: @escaping (pid_t) -> Void,
         focusSpecificWindow: @escaping (pid_t, UInt32, AXUIElement) -> Void,
+        submitFocusSpecificWindow: ((pid_t, UInt32, AXUIElement) -> Void)? = nil,
+        afterSubmittedFocus: ((@escaping @MainActor () -> Void) -> Void)? = nil,
         deactivateSameAppWindow: @escaping (pid_t, UInt32) -> Bool = { _, _ in false },
         activateAndFocusSameAppWindow: @escaping (pid_t, UInt32, AXUIElement) -> Bool = { _, _, _ in false },
         raiseWindow: @escaping (AXUIElement) -> Void,
@@ -26,11 +30,18 @@ struct WindowFocusOperations {
             pid_t, AXWindowRef, RunLoopJob, @escaping @MainActor @Sendable () -> Void
         ) -> Bool = { pid, window, job, completion in
             guard let context = AppAXContextRegistry.contexts[pid] else { return false }
-            return context.enqueueRetryRaise(window, job: job, completion: completion)
+            return context.enqueueRetryRaise(
+                window,
+                job: job,
+                awaitingSubmittedFocus: WindowFocusDispatcher.shared.waitForSubmitted,
+                completion: completion
+            )
         }
     ) {
         self.activateApp = activateApp
         self.focusSpecificWindow = focusSpecificWindow
+        self.submitFocusSpecificWindow = submitFocusSpecificWindow ?? focusSpecificWindow
+        self.afterSubmittedFocus = afterSubmittedFocus ?? { $0() }
         self.deactivateSameAppWindow = deactivateSameAppWindow
         self.activateAndFocusSameAppWindow = activateAndFocusSameAppWindow
         self.raiseWindow = raiseWindow
@@ -40,24 +51,32 @@ struct WindowFocusOperations {
 
     static let live = WindowFocusOperations(
         activateApp: { pid in
+            WindowFocusDispatcher.shared.drain()
             MainThreadAXSpanTrace.measure(.activateApp, pid: pid) {
                 if let runningApp = NSRunningApplication(processIdentifier: pid) {
                     runningApp.activate(options: [])
                 }
             }
         },
-        focusSpecificWindow: { pid, windowId, element in
+        focusSpecificWindow: { pid, windowId, _ in
+            WindowFocusDispatcher.shared.drain()
             MainThreadAXSpanTrace.measure(.privateFocus, pid: pid, windowId: Int(windowId)) {
-                OmniWM.focusWindow(pid: pid, windowId: windowId, windowRef: element)
+                OmniWM.focusWindow(pid: pid, windowId: windowId)
             }
         },
+        submitFocusSpecificWindow: { pid, windowId, _ in
+            WindowFocusDispatcher.shared.submit(pid: pid, windowId: windowId)
+        },
+        afterSubmittedFocus: { WindowFocusDispatcher.shared.afterSubmitted($0) },
         deactivateSameAppWindow: { pid, windowId in
-            MainThreadAXSpanTrace.measure(.sameAppDeactivate, pid: pid, windowId: Int(windowId)) {
+            WindowFocusDispatcher.shared.drain()
+            return MainThreadAXSpanTrace.measure(.sameAppDeactivate, pid: pid, windowId: Int(windowId)) {
                 OmniWM.deactivateSameAppWindow(pid: pid, windowId: windowId)
             } succeeded: { $0 }
         },
         activateAndFocusSameAppWindow: { pid, windowId, element in
-            MainThreadAXSpanTrace.measure(.sameAppHandoff, pid: pid, windowId: Int(windowId)) {
+            WindowFocusDispatcher.shared.drain()
+            return MainThreadAXSpanTrace.measure(.sameAppHandoff, pid: pid, windowId: Int(windowId)) {
                 OmniWM.activateAndFocusSameAppWindow(
                     pid: pid,
                     windowId: windowId,
@@ -66,11 +85,13 @@ struct WindowFocusOperations {
             } succeeded: { $0 }
         },
         raiseWindow: { element in
+            WindowFocusDispatcher.shared.drain()
             _ = MainThreadAXSpanTrace.measure(.axRaise) {
                 performAXAction(element, kAXRaiseAction as CFString, noteKey: "performRaiseFailed")
             } succeeded: { $0 }
         },
         orderWindow: { windowId in
+            WindowFocusDispatcher.shared.drain()
             MainThreadAXSpanTrace.measure(.orderWindow, windowId: Int(windowId)) {
                 SkyLight.shared.orderWindow(windowId, relativeTo: 0, order: .above)
             }

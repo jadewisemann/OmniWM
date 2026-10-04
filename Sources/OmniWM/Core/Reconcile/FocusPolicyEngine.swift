@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 BarutSRB — https://github.com/OmniNull/OmniWM
 
+import CoreGraphics
+import Darwin
 import Foundation
 
 enum FocusPolicyLeaseOwner: String, Equatable {
     case foreignTransientUI = "foreign_transient_ui"
     case nativeMenu = "native_menu"
     case statusPanel = "status_panel"
+    case commandPalette = "command_palette"
+    case workspaceBarRename = "workspace_bar_rename"
     case windowCloseFocusRecovery = "window_close_focus_recovery"
     case nativeAppSwitch = "native_app_switch"
 }
@@ -42,6 +46,8 @@ final class FocusPolicyEngine {
         .foreignTransientUI,
         .nativeMenu,
         .statusPanel,
+        .commandPalette,
+        .workspaceBarRename,
         .windowCloseFocusRecovery,
         .nativeAppSwitch
     ]
@@ -50,6 +56,9 @@ final class FocusPolicyEngine {
     private var leasesByOwner: [FocusPolicyLeaseOwner: FocusPolicyLease] = [:]
     private var leaseIntentIds: [FocusPolicyLeaseOwner: IntentID] = [:]
     private var activeLeaseStorage: FocusPolicyLease?
+    private var screenshotSelectionDetector = ScreenshotSelectionDetector()
+    private var scopedScreenshotSelectionActive: Bool?
+    var screenshotSelectionActiveProvider: (() -> Bool)?
     var activeLease: FocusPolicyLease? {
         activeLeaseStorage
     }
@@ -102,8 +111,15 @@ final class FocusPolicyEngine {
     func evaluate(_ request: FocusPolicyRequest) -> FocusPolicyDecision {
         switch request {
         case .focusFollowsMouse:
-            guard let lease = suppressingFocusFollowsMouseLease() else { return .allow }
-            return .deny(reason: lease.reason)
+            if let lease = suppressingFocusFollowsMouseLease() {
+                return .deny(reason: lease.reason)
+            }
+            if scopedScreenshotSelectionActive
+                ?? (screenshotSelectionActiveProvider?() ?? screenshotSelectionDetector.isActive())
+            {
+                return .deny(reason: "screenshot_selection")
+            }
+            return .allow
         case let .managedAppActivation(source):
             if let menuLease = leasesByOwner[.nativeMenu], !source.isAuthoritative {
                 return .deny(reason: menuLease.reason)
@@ -116,6 +132,14 @@ final class FocusPolicyEngine {
             guard let lease = leasesByOwner[.foreignTransientUI] else { return .allow }
             return .deny(reason: lease.reason)
         }
+    }
+
+    func performIfFocusFollowsMouseAllowed(_ action: () -> Void) {
+        guard evaluate(.focusFollowsMouse).allowsFocusChange else { return }
+        let previousSnapshot = scopedScreenshotSelectionActive
+        scopedScreenshotSelectionActive = false
+        defer { scopedScreenshotSelectionActive = previousSnapshot }
+        action()
     }
 
     private func retireLeaseIntent(
@@ -156,5 +180,48 @@ final class FocusPolicyEngine {
             }
         }
         return nil
+    }
+}
+
+private struct ScreenshotSelectionDetector {
+    private var activeWindowId: CGWindowID?
+
+    mutating func isActive() -> Bool {
+        if let activeWindowId,
+           let windows = CGWindowListCopyWindowInfo(.optionIncludingWindow, activeWindowId) as? [[String: Any]],
+           windows.contains(where: Self.isSelectionWindow)
+        {
+            return true
+        }
+
+        activeWindowId = nil
+        guard let windows = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly, .excludeDesktopElements],
+            kCGNullWindowID
+        ) as? [[String: Any]] else { return false }
+        guard let selectionWindow = windows.first(where: Self.isSelectionWindow),
+              let windowId = selectionWindow[kCGWindowNumber as String] as? CGWindowID
+        else { return false }
+        activeWindowId = windowId
+        return true
+    }
+
+    private static func isSelectionWindow(_ window: [String: Any]) -> Bool {
+        guard window[kCGWindowIsOnscreen as String] as? Bool == true,
+              let layer = window[kCGWindowLayer as String] as? Int,
+              layer >= Int(CGWindowLevelForKey(.screenSaverWindow)),
+              let pid = window[kCGWindowOwnerPID as String] as? pid_t
+        else { return false }
+        if let title = window[kCGWindowName as String] as? String,
+           !title.isEmpty,
+           title != "touchshield"
+        {
+            return false
+        }
+        var path = [CChar](repeating: 0, count: 4096)
+        guard proc_pidpath(pid, &path, UInt32(path.count)) > 0 else { return false }
+        return path.withUnsafeBufferPointer {
+            strcmp($0.baseAddress, "/usr/sbin/screencapture") == 0
+        }
     }
 }

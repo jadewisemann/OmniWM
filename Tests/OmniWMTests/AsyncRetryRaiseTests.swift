@@ -92,12 +92,38 @@ final class AsyncRetryRaiseTests: XCTestCase {
                 var raises = 0
                 let result = AppAXContext.performRetryRaise(
                     window, windows: windows, suppression: suppression, job: job,
+                    awaitingSubmittedFocus: {},
                     raiseWindow: { _ in raises += 1
                         return true
                     }
                 )
                 XCTAssertEqual(result, condition == 5)
                 XCTAssertEqual(raises, condition == 5 ? 1 : 0)
+            }
+        }
+    }
+
+    func testWorkerWaitsForSubmittedFocusBeforeRaisingAndSkipsRaiseCancelledDuringWait() {
+        let window = AXWindowRef(element: AXUIElementCreateApplication(831_007), windowId: 831_107)
+        $appThreadToken.withValue(AppThreadToken(pid: 831_007)) {
+            for cancelledDuringWait in [false, true] {
+                let windows = ThreadGuardedValue([window.windowId: window.element])
+                defer { windows.destroy() }
+                let job = RunLoopJob()
+                var steps: [String] = []
+                let raised = AppAXContext.performRetryRaise(
+                    window, windows: windows, suppression: LockedWindowIdSet(), job: job,
+                    awaitingSubmittedFocus: {
+                        steps.append("wait")
+                        if cancelledDuringWait { job.cancel() }
+                    },
+                    raiseWindow: { _ in
+                        steps.append("raise")
+                        return true
+                    }
+                )
+                XCTAssertEqual(raised, !cancelledDuringWait)
+                XCTAssertEqual(steps, cancelledDuringWait ? ["wait"] : ["wait", "raise"])
             }
         }
     }
@@ -116,6 +142,7 @@ final class AsyncRetryRaiseTests: XCTestCase {
                 }
                 _ = AppAXContext.performRetryRaise(
                     window, windows: windows, suppression: LockedWindowIdSet(), job: job,
+                    awaitingSubmittedFocus: {},
                     raiseWindow: { _ in
                         entered.signal()
                         _ = release.wait(timeout: .now() + 3)

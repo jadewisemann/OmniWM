@@ -9,7 +9,8 @@ extension WindowActionHandler {
     func navigateToWindowInternal(
         token: WindowToken,
         workspaceId: WorkspaceDescriptor.ID,
-        affectedWorkspaces: Set<WorkspaceDescriptor.ID> = []
+        affectedWorkspaces: Set<WorkspaceDescriptor.ID> = [],
+        focusOrigin: ManagedFocusOrigin = .keyboardOrProgrammatic
     ) -> Bool {
         guard let controller,
               let handle = prepareWindowNavigation(token: token, workspaceId: workspaceId)
@@ -18,7 +19,7 @@ extension WindowActionHandler {
         }
         commitWindowNavigation(
             handle: handle, workspaceId: workspaceId,
-            affectedWorkspaces: affectedWorkspaces, controller: controller
+            affectedWorkspaces: affectedWorkspaces, focusOrigin: focusOrigin, controller: controller
         )
         return true
     }
@@ -47,7 +48,7 @@ extension WindowActionHandler {
               let handle = controller.workspaceManager.handle(for: token),
               let entry = controller.workspaceManager.entry(for: token),
               entry.workspaceId == workspaceId,
-              !controller.workspaceManager.isAppHidden(pid: entry.pid)
+              !controller.workspaceManager.isWindowSuppressedByMacOS(entry.token)
         else {
             return nil
         }
@@ -104,7 +105,7 @@ extension WindowActionHandler {
                let monitor = controller.workspaceManager.monitor(for: workspaceId)
             {
                 let gap = controller.innerGap(for: monitor)
-                let workingFrame = controller.insetWorkingFrame(for: monitor)
+                let workingFrame = controller.niriWorkingFrame(for: monitor)
                 let orientation = controller.settings.monitors.effectiveOrientation(for: monitor)
                 controller.workspaceManager.withEngineMutationScope {
                     engine.activateWindow(niriWindow.id, in: workspaceId)
@@ -145,6 +146,7 @@ extension WindowActionHandler {
         handle: WindowHandle,
         workspaceId: WorkspaceDescriptor.ID,
         affectedWorkspaces: Set<WorkspaceDescriptor.ID>,
+        focusOrigin: ManagedFocusOrigin,
         controller: WMController
     ) {
         let newestFocusIntentId = controller.intentLedger.newestFocusIntentId()
@@ -156,7 +158,7 @@ extension WindowActionHandler {
             else {
                 return
             }
-            controller.focusWindow(handle.id)
+            controller.focusWindow(handle.id, origin: focusOrigin)
         }
         let focusTargetIfStillCurrent: LayoutRefreshController.PostLayoutAction = { [weak controller] in
             guard let controller,

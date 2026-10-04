@@ -12,10 +12,12 @@ extension AppAXContext {
         windows: ThreadGuardedValue<[Int: AXUIElement]>,
         suppression: LockedWindowIdSet,
         job: RunLoopJob,
+        awaitingSubmittedFocus: () -> Void,
         raiseWindow: (AXUIElement) -> Bool = {
             performAXAction($0, kAXRaiseAction as CFString, noteKey: "performRaiseFailed")
         }
     ) -> Bool {
+        awaitingSubmittedFocus()
         guard !job.isCancelled, !suppression.contains(window.windowId),
               let element = windows.valueIfExists?[window.windowId],
               CFEqual(element, window.element), !job.isCancelled

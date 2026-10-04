@@ -215,7 +215,10 @@ final class AppRuleTests: XCTestCase {
         XCTAssertTrue(AppRulePrimarySpanPercent.percent(from: .nan).isNaN)
         XCTAssertEqual(AppRulePrimarySpanPercent.percent(from: .infinity), .infinity)
         XCTAssertEqual(AppRulePrimarySpanPercent.percent(from: -.infinity), -.infinity)
-        XCTAssertEqual(AppRulePrimarySpanPercent.displayText(for: proportion), "55.55")
+        XCTAssertEqual(
+            AppRulePrimarySpanPercent.displayText(for: proportion, locale: Locale(identifier: "en_US_POSIX")),
+            "55.55"
+        )
 
         var invalidDraft = AppRuleDraft(bundleId: "com.test.app")
         invalidDraft.initialContainerPrimarySpanEnabled = true

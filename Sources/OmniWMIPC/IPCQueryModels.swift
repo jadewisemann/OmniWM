@@ -172,6 +172,7 @@ public struct IPCFocusedWindowSnapshot: Codable, Equatable, Sendable {
     public let app: IPCAppRef?
     public let title: String?
     public let frame: IPCRect?
+    public let isFullscreen: Bool?
 
     public init(
         id: String,
@@ -180,7 +181,8 @@ public struct IPCFocusedWindowSnapshot: Codable, Equatable, Sendable {
         display: IPCDisplayRef?,
         app: IPCAppRef?,
         title: String?,
-        frame: IPCRect?
+        frame: IPCRect?,
+        isFullscreen: Bool? = nil
     ) {
         self.id = id
         self.pid = pid
@@ -189,6 +191,7 @@ public struct IPCFocusedWindowSnapshot: Codable, Equatable, Sendable {
         self.app = app
         self.title = title
         self.frame = frame
+        self.isFullscreen = isFullscreen
     }
 }
 
@@ -213,6 +216,7 @@ public struct IPCWindowQuerySnapshot: Codable, Equatable, Sendable {
     public let layoutReason: IPCLayoutReason?
     public let manualOverride: IPCManualWindowOverride?
     public let isFocused: Bool?
+    public let isFullscreen: Bool?
     public let isVisible: Bool?
     public let isAppHidden: Bool?
     public let isScratchpad: Bool?
@@ -232,6 +236,7 @@ public struct IPCWindowQuerySnapshot: Codable, Equatable, Sendable {
         layoutReason: IPCLayoutReason? = nil,
         manualOverride: IPCManualWindowOverride? = nil,
         isFocused: Bool? = nil,
+        isFullscreen: Bool? = nil,
         isVisible: Bool? = nil,
         isAppHidden: Bool? = nil,
         isScratchpad: Bool? = nil,
@@ -250,6 +255,7 @@ public struct IPCWindowQuerySnapshot: Codable, Equatable, Sendable {
         self.layoutReason = layoutReason
         self.manualOverride = manualOverride
         self.isFocused = isFocused
+        self.isFullscreen = isFullscreen
         self.isVisible = isVisible
         self.isAppHidden = isAppHidden
         self.isScratchpad = isScratchpad

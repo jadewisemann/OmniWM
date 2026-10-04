@@ -57,6 +57,7 @@ extension AXEventHandler {
             return
         }
         guard await controller.axManager.ensureContext(for: app, pid: pid),
+              controller.hasStartedServices,
               !Task.isCancelled
         else { return }
         controller.axManager.bindManagedWindows(controller.workspaceManager.entries(forPid: pid))
@@ -147,6 +148,11 @@ extension AXEventHandler {
         axPid: pid_t?,
         controller: WMController
     ) -> WindowState? {
+        let isMinimized = controller.workspaceManager.entry(for: candidate.token)?.observedState.isMinimized
+            ?? candidate.isMinimized
+        if isMinimized {
+            controller.axManager.setWindowMinimized(true, token: candidate.token)
+        }
         let trackedToken = controller.workspaceManager.addWindow(
             candidate.axRef,
             pid: candidate.token.pid,
@@ -156,7 +162,8 @@ extension AXEventHandler {
             ruleEffects: candidate.ruleEffects,
             admissionHints: candidate.admissionHints,
             lifetimeAuthority: .directLifecycle,
-            allowsNativeFocusAdoption: !candidate.appFullscreen,
+            allowsNativeFocusAdoption: !candidate.appFullscreen && !isMinimized,
+            isMinimized: isMinimized,
             managedReplacementMetadata: candidate.replacementMetadata
         )
         guard let trackedEntry = controller.workspaceManager.entry(for: trackedToken) else {
@@ -188,7 +195,7 @@ extension AXEventHandler {
         controller: WMController
     ) -> CGRect? {
         var floatingTargetFrame: CGRect?
-        if entry.mode == .floating {
+        if entry.mode == .floating, !entry.observedState.isMinimized {
             let observedFrame = AXWindowService.framePreferFast(candidate.axRef)
                 ?? (try? AXWindowService.frame(candidate.axRef))
             let preferredMonitor = controller.workspaceManager.monitor(for: entry.workspaceId)

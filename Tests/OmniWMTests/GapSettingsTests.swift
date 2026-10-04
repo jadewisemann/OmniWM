@@ -670,14 +670,24 @@ final class GapSettingsTests: XCTestCase {
             name: "Built-in"
         )
 
-        XCTAssertEqual(
-            controller.insetWorkingFrame(for: monitor),
-            CGRect(x: 12, y: 14, width: 1416, height: 816)
-        )
-        XCTAssertEqual(
-            controller.fullscreenLayoutFrame(for: monitor),
-            CGRect(x: 0, y: 0, width: 1440, height: 836)
-        )
+        settings.borders.enabled = false
+        let cases: [(WorkspaceBarPosition, CGRect, CGRect)] = [
+            (
+                .belowMenuBar,
+                CGRect(x: 12, y: 14, width: 1416, height: 816),
+                CGRect(x: 0, y: 0, width: 1440, height: 836)
+            ),
+            (.bottom, CGRect(x: 12, y: 38, width: 1416, height: 816), CGRect(x: 0, y: 24, width: 1440, height: 836)),
+            (.left, CGRect(x: 36, y: 14, width: 1392, height: 840), CGRect(x: 24, y: 0, width: 1416, height: 860)),
+            (.right, CGRect(x: 12, y: 14, width: 1392, height: 840), CGRect(x: 0, y: 0, width: 1416, height: 860))
+        ]
+        for (position, working, fullscreen) in cases {
+            settings.workspaceBar.position = position
+            let frames = controller.layoutFrames(for: monitor, scale: 1)
+            XCTAssertEqual(frames.workingFrame, working)
+            XCTAssertEqual(frames.fullscreenLayoutFrame, fullscreen)
+            XCTAssertEqual(frames.borderSafeFillFrame, fullscreen)
+        }
     }
 
     @MainActor

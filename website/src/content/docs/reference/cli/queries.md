@@ -42,13 +42,26 @@ Use `--fields` with a comma-separated list to limit returned fields.
 
 Field tokens are part of the CLI contract. Returned JSON still uses the payload schema's field names, so the selected token may not be byte-for-byte identical to the JSON key. For example, `window-counts` selects the workspace payload's `counts` field.
 
-**Window fields:** `id`, `pid`, `window-id`, `workspace`, `display`, `app`, `title`, `frame`, `mode`, `layout-reason`, `manual-override`, `is-focused`, `is-visible`, `is-app-hidden`, `is-scratchpad`, `scratchpad-index`, `hidden-reason`
+**Window fields:** `id`, `pid`, `window-id`, `workspace`, `display`, `app`, `title`, `frame`, `mode`, `layout-reason`, `manual-override`, `is-focused`, `is-fullscreen`, `is-visible`, `is-app-hidden`, `is-scratchpad`, `scratchpad-index`, `hidden-reason`
 
 `window-id` returns the JSON field `windowId`, the raw CGWindowID of the window. It is stable for the window's lifetime but not session-scoped; keep using `id` for `window` actions.
 
 For windows, `is-visible` is true only when the workspace is visible, the window has no `hidden-reason`, its macOS application is not hidden, and WindowServer has not reported the window as ordered out. If the WindowServer ordered-in state is unavailable, the other visibility checks determine the result. The `--visible` selector uses the same conditions.
 
+`hidden-reason` selects the optional JSON field `hiddenReason`:
+
+| Value | Meaning |
+|-------|---------|
+| `workspace-inactive` | Parked for an inactive workspace. |
+| `tab-inactive` | Hidden as an inactive member of a Dwindle group or Niri tabbed column. |
+| `layout-transient` | Other layout-owned hiding, including Niri columns outside the viewport and active members awaiting reveal. |
+| `scratchpad` | Hidden by the scratchpad. |
+
+Workspace and scratchpad hiding retain their reasons. For other layout hiding, an inactive tab reports `tab-inactive` even when its column is also outside the viewport. An active member awaiting reveal keeps `layout-transient` until its hidden state clears. `hiddenReason` is omitted when no hidden state is recorded; `layout-transient` can persist in a settled layout and is not an animation-completion signal.
+
 `is-app-hidden` exposes the PID-scoped macOS hide state independently of `layout-reason` and `hidden-reason`; selecting `is-app-hidden` returns the JSON field `isAppHidden`.
+
+`is-fullscreen` returns the JSON field `isFullscreen`: true while the window is in OmniWM's own fullscreen (`toggle-fullscreen`) in its workspace's active layout. Native macOS Full Screen is reported separately by `layout-reason`. The `focused-window` query always includes `isFullscreen` for the focused window.
 
 **Workspace fields:** `id`, `raw-name`, `display-name`, `number`, `layout`, `display`, `is-focused`, `is-visible`, `is-current`, `window-counts`, `focused-window-id`
 
@@ -76,9 +89,11 @@ The three workspace flags answer different questions. `is-focused` marks the wor
 | `rules` | — | — | Persisted user window rules |
 | `rule-actions` | — | — | Rule action registry |
 | `queries` | — | — | Query registry |
-| `commands` | — | — | Automation action registry for `command`, `workspace`, and `window` surfaces |
+| `commands` | — | — | Automation action registry for `command`, `workspace`, `window`, and `window mark` surfaces |
 | `subscriptions` | — | — | Subscription registry |
-| `capabilities` | — | — | Full protocol capabilities |
+| `capabilities` | — | — | Full protocol capabilities, including `windowMarkActions` |
+
+`window mark` descriptors in `commands` and `capabilities` are available. List live marks with [`omniwmctl window mark list`](/reference/cli/actions/#window-marks).
 
 **Examples:**
 

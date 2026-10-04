@@ -72,6 +72,13 @@ extension LayoutRefreshController {
                    .decisionEvidence.sizeConstraints
            )
         {
+            if let minimized = candidate.minimizedAttribute {
+                controller.axEventHandler.updateWindowMinimizedState(
+                    minimized,
+                    token: token,
+                    requestRefresh: false
+                )
+            }
             restoreNativeFullscreenAfterStructuralReplacement(
                 from: structuralMatch.token,
                 to: token,

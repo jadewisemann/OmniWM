@@ -99,6 +99,34 @@ final class OverviewPreviewRetentionTests: XCTestCase {
         await driver.waitForStops(4)
     }
 
+    func testCacheHitRecencySurvivesLaterLiveFramePublication() async throws {
+        let frames = try (0 ..< 3).map { _ in try makeOverviewPreviewFrame() }
+        let driver = OverviewPreviewTestDriver()
+        let budget = frames[0].surface.allocationSize * 2
+        let capture = driver.makeCapture(maximumRetainedBytes: budget)
+        let handles = handles(count: 3)
+        capture.reconcile(
+            represented: Set(handles), visible: requests(for: handles), prioritizing: handles[1]
+        )
+        await driver.waitForStarts(3)
+        driver.completeAllStarts()
+        for stream in driver.streams {
+            let index = try XCTUnwrap(handles.firstIndex(of: stream.request.handle))
+            await publish(frames[index], through: stream, into: capture)
+        }
+        XCTAssertTrue(capture.preview(for: handles[2]) === frames[2])
+        let replacement = try makeOverviewPreviewFrame()
+        let stream = try XCTUnwrap(driver.streams.first { $0.request.handle === handles[2] })
+        await publish(replacement, through: stream, into: capture)
+        capture.clear()
+        await driver.waitForStops(3)
+        XCTAssertEqual(capture.cachedByteCount, budget)
+        XCTAssertNil(capture.preview(for: handles[0]))
+        XCTAssertTrue(capture.preview(for: handles[1]) === frames[1])
+        XCTAssertTrue(capture.preview(for: handles[2]) === replacement)
+        capture.releaseCache()
+    }
+
     private func handles(count: Int) -> [WindowHandle] {
         (1 ... count).map { WindowHandle(id: WindowToken(pid: 123, windowId: $0)) }
     }
