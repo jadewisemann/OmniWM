@@ -9,6 +9,7 @@ final class OverviewSettingsTOMLTests: XCTestCase {
     func testDefaultsMatchOverviewContract() {
         let defaults = SettingsExport.defaults()
 
+        XCTAssertEqual(defaults.overview.enabled, true)
         XCTAssertEqual(defaults.overview.zoom, 1.0)
         XCTAssertEqual(defaults.overview.invertScrollDirection, false)
         XCTAssertEqual(defaults.overview.mouseScrollSpeed, 1)
@@ -22,6 +23,7 @@ final class OverviewSettingsTOMLTests: XCTestCase {
 
     func testRoundTripsCanonicalOverviewTables() throws {
         var export = SettingsExport.defaults()
+        export.overview.enabled = false
         export.overview.zoom = 1.25
         export.overview.invertScrollDirection = true
         export.overview.mouseScrollSpeed = 1.75
@@ -37,11 +39,13 @@ final class OverviewSettingsTOMLTests: XCTestCase {
         let decoded = try SettingsTOMLCodec.decode(data)
 
         XCTAssertTrue(toml.contains("[overview]"))
+        XCTAssertTrue(toml.contains("enabled = false"))
         XCTAssertTrue(toml.contains("[overview.backdrop]"))
         XCTAssertTrue(toml.contains("[overview.windowBorders.normal]"))
         XCTAssertTrue(toml.contains("[overview.windowBorders.hovered]"))
         XCTAssertTrue(toml.contains("[overview.windowBorders.selected]"))
         XCTAssertEqual(decoded.overview.zoom, export.overview.zoom)
+        XCTAssertEqual(decoded.overview.enabled, false)
         XCTAssertEqual(decoded.overview.invertScrollDirection, true)
         XCTAssertEqual(decoded.overview.mouseScrollSpeed, 1.75)
         XCTAssertEqual(decoded.overview.mouseButton, 4)
@@ -100,6 +104,13 @@ final class OverviewSettingsTOMLTests: XCTestCase {
         let toml = String(decoding: try SettingsTOMLCodec.encode(export), as: UTF8.self)
         XCTAssertFalse(toml.contains("matchFocusBorder"))
         XCTAssertEqual(try SettingsTOMLCodec.decode(Data(toml.utf8)).overview.matchFocusBorder, true)
+    }
+
+    func testMissingEnabledDefaultsToOn() throws {
+        var export = SettingsExport.defaults()
+        export.overview.enabled = nil
+        let toml = String(decoding: try SettingsTOMLCodec.encode(export), as: UTF8.self)
+        XCTAssertEqual(try SettingsTOMLCodec.decode(Data(toml.utf8)).overview.enabled, true)
     }
 
     func testMalformedOverviewTypesRejectDecode() throws {

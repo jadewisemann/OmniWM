@@ -6,7 +6,7 @@ import Foundation
 import XCTest
 
 final class WindowGesturePersistenceTests: XCTestCase {
-    func testWindowGestureKeysAreAdditiveWithinSchemaThree() throws {
+    func testWindowGestureKeysAreAdditiveWithinCurrentSchema() throws {
         let canonical = String(decoding: try SettingsTOMLCodec.encode(.defaults()), as: UTF8.self)
         let data = Data(canonical.components(separatedBy: "\n")
             .filter { !$0.hasPrefix("windowMove") && !$0.hasPrefix("windowResize")
@@ -16,7 +16,6 @@ final class WindowGesturePersistenceTests: XCTestCase {
 
         let result = try SettingsTOMLCodec.decodeForLoad(data)
 
-        XCTAssertEqual(SettingsTOMLCodec.currentSchemaVersion, 4)
         XCTAssertNil(result.migration)
         XCTAssertEqual(result.export.gestures.windowMoveEnabled, false)
         XCTAssertEqual(result.export.gestures.windowMoveFingerCount, .four)

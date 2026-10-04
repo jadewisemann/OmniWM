@@ -81,6 +81,21 @@ final class FocusPolicyWindowFrontingTests: XCTestCase {
         XCTAssertTrue(engine.evaluate(.managedFocusRecovery).allowsFocusChange)
     }
 
+    func testScreenshotSelectionSuppressesOnlyFocusFollowsMouse() {
+        let engine = FocusPolicyEngine()
+        var selectionActive = true
+        engine.screenshotSelectionActiveProvider = { selectionActive }
+
+        XCTAssertFalse(engine.evaluate(.focusFollowsMouse).allowsFocusChange)
+        XCTAssertTrue(engine.evaluate(.managedFocusRecovery).allowsFocusChange)
+        XCTAssertTrue(engine.evaluate(.windowFronting).allowsFocusChange)
+        XCTAssertTrue(engine.evaluate(.managedAppActivation(source: .cgsFrontAppChanged)).allowsFocusChange)
+
+        selectionActive = false
+
+        XCTAssertTrue(engine.evaluate(.focusFollowsMouse).allowsFocusChange)
+    }
+
     func testStatusPanelAndNativeMenuLeasesEndIndependently() {
         let engine = FocusPolicyEngine()
         engine.beginLease(owner: .nativeMenu, reason: "menu_anywhere", duration: nil)

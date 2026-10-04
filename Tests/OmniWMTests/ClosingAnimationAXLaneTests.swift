@@ -62,7 +62,7 @@ final class ClosingAnimationAXLaneTests: XCTestCase {
                 frame: targetFrame,
                 currentFrameHint: currentFrameHint
             ),
-            generation: generations.nextGeneration(for: animationId)
+            generation: generations.nextGeneration(for: animationId, windowId: windowId)
         )
         var writtenWindow: AXWindowRef?
         var receivedHint: CGRect?
@@ -107,7 +107,7 @@ final class ClosingAnimationAXLaneTests: XCTestCase {
                 frame: CGRect(x: 40, y: 50, width: 600, height: 400),
                 currentFrameHint: nil
             ),
-            generation: generations.nextGeneration(for: animationId)
+            generation: generations.nextGeneration(for: animationId, windowId: 91_011)
         )
         var setterCalls = 0
 
@@ -152,9 +152,9 @@ final class ClosingAnimationAXLaneTests: XCTestCase {
         let generations = LockedClosingFrameGenerationMap()
         let oldAnimationId = UUID()
         let replacementAnimationId = UUID()
-        let oldGeneration = generations.nextGeneration(for: oldAnimationId)
-        let replacementGeneration = generations.nextGeneration(for: replacementAnimationId)
-        let supersedingOldGeneration = generations.nextGeneration(for: oldAnimationId)
+        let oldGeneration = generations.nextGeneration(for: oldAnimationId, windowId: 91_012)
+        let replacementGeneration = generations.nextGeneration(for: replacementAnimationId, windowId: 91_012)
+        let supersedingOldGeneration = generations.nextGeneration(for: oldAnimationId, windowId: 91_012)
 
         XCTAssertFalse(generations.isCurrent(oldGeneration, for: oldAnimationId))
         XCTAssertTrue(generations.isCurrent(supersedingOldGeneration, for: oldAnimationId))
@@ -172,7 +172,7 @@ final class ClosingAnimationAXLaneTests: XCTestCase {
         let closingGenerations = LockedClosingFrameGenerationMap()
         let animationId = UUID()
         let ordinaryGeneration = ordinaryGenerations.nextGeneration(for: windowId)
-        let closingGeneration = closingGenerations.nextGeneration(for: animationId)
+        let closingGeneration = closingGenerations.nextGeneration(for: animationId, windowId: windowId)
 
         closingGenerations.invalidateAll()
 

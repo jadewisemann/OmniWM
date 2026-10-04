@@ -16,11 +16,13 @@ extension AXEventHandler {
             {
                 return
             }
-            self.handleAppActivation(
-                pid: expectedToken.pid,
-                source: .focusedWindowChanged,
-                origin: .probe
-            )
+            MainThreadAXSpanTrace.measure(.focusProbe, pid: expectedToken.pid, windowId: expectedToken.windowId) {
+                _ = self.handleAppActivation(
+                    pid: expectedToken.pid,
+                    source: .focusedWindowChanged,
+                    origin: .probe
+                )
+            }
         }
     }
 

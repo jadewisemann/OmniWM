@@ -111,7 +111,7 @@ extension WorkspaceNavigationHandler {
         guard let controller,
               controller.workspaceManager.descriptor(for: targetWsId) != nil,
               controller.workspaceManager.monitorForWorkspace(targetWsId) != nil,
-              !controller.workspaceManager.isAppHidden(handle.id)
+              !controller.workspaceManager.isWindowSuppressedByMacOS(handle.id)
         else {
             return .unchanged
         }

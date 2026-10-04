@@ -67,7 +67,7 @@ extension NiriLayoutHandler {
     ) -> Bool {
         var recovered = false
         if let lastFocused = controller.workspaceManager.lastFocusedToken(in: wsId),
-           !controller.isManagedWindowSuppressedByMacOSHide(lastFocused),
+           !controller.isManagedWindowSuppressedByMacOS(lastFocused),
            let lastNode = engine.findNode(for: lastFocused, in: wsId)
         {
             activateNode(
@@ -81,7 +81,7 @@ extension NiriLayoutHandler {
             )
             recovered = true
         } else if let firstEntry = controller.workspaceManager.tiledEntries(in: wsId).first(where: {
-            !controller.isManagedWindowSuppressedByMacOSHide($0.token)
+            !controller.isManagedWindowSuppressedByMacOS($0.token)
         }),
             let firstNode = engine.findNode(for: firstEntry.token, in: wsId)
         {
@@ -148,7 +148,7 @@ extension NiriLayoutHandler {
             state: &state
         ) else { return nil }
         let targetIsSuppressed = (node as? NiriWindow).map {
-            controller.isManagedWindowSuppressedByMacOSHide($0.token)
+            controller.isManagedWindowSuppressedByMacOS($0.token)
         } ?? false
         if !targetIsSuppressed {
             prepareNodeActivation(node, in: wsId, state: &state, options: options)

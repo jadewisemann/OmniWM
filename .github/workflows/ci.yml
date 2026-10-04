@@ -105,3 +105,43 @@ jobs:
         run: swift package dump-package > /dev/null
       - name: Run the serial test suite
         run: LIBRARY_PATH="$(./Scripts/ghostty-preflight.sh print-library-dir)${LIBRARY_PATH:+:$LIBRARY_PATH}" swift test
+
+  package:
+    name: Package fork app
+    needs: [verify, tests]
+    if: github.repository == 'jadewisemann/OmniWM'
+    runs-on: xcode-27
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.pr_number != '' && format('refs/pull/{0}/merge', inputs.pr_number) || github.ref }}
+          persist-credentials: false
+      - uses: actions/cache@v6.1.0
+        with:
+          path: |
+            .cache/dev-tools/bin
+            .cache/dev-tools/downloads
+            Frameworks/GhosttyKit.xcframework
+          key: dev-deps-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Scripts/dev-tools.env', 'Scripts/build-metadata.env') }}
+      - name: Set up dependencies
+        run: ./Scripts/dev-tools.sh setup
+      - name: Package development-signed release build
+        env:
+          OMNIWM_SIGNING_IDENTITY: '-'
+        run: ./Scripts/package-app.sh release dev
+      - name: Create app archive and checksums
+        run: |
+          VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' dist/OmniWM.app/Contents/Info.plist)
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]
+          ARCHIVE="OmniWM-v${VERSION}-fork.${GITHUB_RUN_NUMBER}-arm64.zip"
+          mkdir -p release-assets
+          ditto -c -k --keepParent dist/OmniWM.app "release-assets/$ARCHIVE"
+          (cd release-assets && shasum -a 256 "$ARCHIVE" > SHA256SUMS)
+          git rev-parse HEAD > release-assets/source-commit.txt
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: omniwm-fork-app
+          path: release-assets/
+          if-no-files-found: error
+          retention-days: 14

@@ -10,9 +10,17 @@ final class WindowRuleReevaluationScheduler {
     private var pendingWindowRuleReevaluationTask: Task<Void, Never>?
     private var pendingWindowRuleReevaluationTargets: Set<WindowRuleReevaluationTarget> = []
     private var pendingWindowRuleReevaluationGeneration: UInt64 = 0
+    private let reevaluate: (WMController, Set<WindowRuleReevaluationTarget>) async -> WindowRuleReevaluationOutcome
 
-    init(controller: WMController) {
+    init(
+        controller: WMController,
+        reevaluate: @escaping (WMController, Set<WindowRuleReevaluationTarget>) async
+            -> WindowRuleReevaluationOutcome = {
+                await $0.reevaluateWindowRules(for: $1)
+            }
+    ) {
         self.controller = controller
+        self.reevaluate = reevaluate
     }
 
     func reset() {
@@ -53,11 +61,13 @@ final class WindowRuleReevaluationScheduler {
                 return
             }
             let targets = self.pendingWindowRuleReevaluationTargets
-            self.pendingWindowRuleReevaluationTargets.removeAll()
+            let outcome = await self.reevaluate(controller, targets)
+            guard !Task.isCancelled, self.pendingWindowRuleReevaluationGeneration == generation else { return }
             self.pendingWindowRuleReevaluationTask = nil
-            let outcome = await controller.reevaluateWindowRules(for: targets)
             if outcome.stale {
                 self.schedule(targets: targets)
+            } else {
+                self.pendingWindowRuleReevaluationTargets.removeAll()
             }
         }
     }

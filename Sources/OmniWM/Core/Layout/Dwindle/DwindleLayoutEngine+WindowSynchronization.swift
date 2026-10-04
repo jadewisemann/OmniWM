@@ -31,6 +31,14 @@ extension DwindleLayoutEngine {
         return activeFrame
     }
 
+    private func exitFullscreen(in workspaceId: WorkspaceDescriptor.ID) -> Bool {
+        let tokens = fullscreenTokens(in: workspaceId)
+        for token in tokens {
+            findNode(for: token, in: workspaceId)?.tile?.setFullscreen(false, for: token)
+        }
+        return !tokens.isEmpty
+    }
+
     func syncWindows(
         _ tokens: [WindowToken],
         in workspaceId: WorkspaceDescriptor.ID,
@@ -54,10 +62,11 @@ extension DwindleLayoutEngine {
             reconcileProjectedSelection(preferredToken: focusedToken, in: state)
         }
 
+        let exitedFullscreen = !toAdd.isEmpty && exitFullscreen(in: workspaceId)
         let shouldBootstrapIncrementally = bootstrapScreen != nil
             && !tokens.isEmpty
             && currentFrames(in: workspaceId).isEmpty
-        if shouldBootstrapIncrementally,
+        if shouldBootstrapIncrementally || exitedFullscreen,
            let bootstrapScreen,
            windowCount(in: workspaceId) > 0
         {

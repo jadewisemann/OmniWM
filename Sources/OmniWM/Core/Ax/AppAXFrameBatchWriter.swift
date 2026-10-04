@@ -148,7 +148,7 @@ struct AppAXFrameBatchWriter {
         if isCancelled() || !generations.isCurrent(request.generation, for: request.windowId) {
             return .cancelled
         }
-        if hardSuppression?.isHardSuppressed() == true
+        if hardSuppression?.isHardSuppressed(for: request.windowId) == true
             || suppression?.contains(request.windowId) == true
         {
             return .suppressed

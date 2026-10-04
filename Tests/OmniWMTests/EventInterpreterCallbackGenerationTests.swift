@@ -90,13 +90,24 @@ final class EventInterpreterCallbackGenerationTests: XCTestCase {
     }
 
     @MainActor
-    func testMiniaturizedWindowCallbackRequiresCurrentGeneration() {
+    func testMinimizationCallbacksRequireCurrentGeneration() throws {
         let pid: pid_t = 701_003
-        let token = WindowToken(pid: pid, windowId: 801_003)
         let currentGeneration: UInt64 = 32
         let controller = WindowAdmissionTestSupport.controller()
         defer { stop(controller) }
-        _ = controller.workspaceManager.recordExternalFocus(pid: token.pid, windowId: token.windowId)
+        let workspaceId = try XCTUnwrap(
+            controller.workspaceManager.workspaceId(for: "1", createIfMissing: true)
+        )
+        let axRef = AXWindowRef(
+            element: AXUIElementCreateApplication(pid),
+            windowId: 801_003
+        )
+        let token = controller.workspaceManager.addWindow(
+            axRef,
+            pid: pid,
+            windowId: axRef.windowId,
+            to: workspaceId
+        )
         let interpreter = EventInterpreter(
             controller: controller,
             callbackGenerationProvider: { candidatePID in
@@ -108,23 +119,45 @@ final class EventInterpreterCallbackGenerationTests: XCTestCase {
             stamped(
                 .axWindow(.windowMiniaturized(
                     pid: pid,
-                    windowId: token.windowId,
+                    axRef: axRef,
                     callbackGeneration: currentGeneration - 1
                 ))
             )
         )
-        XCTAssertEqual(controller.workspaceManager.externalFocusToken, token)
+        XCTAssertEqual(controller.workspaceManager.observedState(for: token)?.isMinimized, false)
 
         interpreter.handleIntakeEvent(
             stamped(
                 .axWindow(.windowMiniaturized(
                     pid: pid,
-                    windowId: token.windowId,
+                    axRef: axRef,
                     callbackGeneration: currentGeneration
                 ))
             )
         )
-        XCTAssertNil(controller.workspaceManager.externalFocusToken)
+        XCTAssertEqual(controller.workspaceManager.observedState(for: token)?.isMinimized, true)
+
+        interpreter.handleIntakeEvent(
+            stamped(
+                .axWindow(.windowDeminiaturized(
+                    pid: pid,
+                    axRef: axRef,
+                    callbackGeneration: currentGeneration - 1
+                ))
+            )
+        )
+        XCTAssertEqual(controller.workspaceManager.observedState(for: token)?.isMinimized, true)
+
+        interpreter.handleIntakeEvent(
+            stamped(
+                .axWindow(.windowDeminiaturized(
+                    pid: pid,
+                    axRef: axRef,
+                    callbackGeneration: currentGeneration
+                ))
+            )
+        )
+        XCTAssertEqual(controller.workspaceManager.observedState(for: token)?.isMinimized, false)
     }
 
     private func stamped(_ event: IntakeEvent) -> StampedIntakeEvent {

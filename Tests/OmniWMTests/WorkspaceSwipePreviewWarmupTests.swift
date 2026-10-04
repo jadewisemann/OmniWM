@@ -219,6 +219,88 @@ final class WorkspaceSwipePreviewWarmupTests: XCTestCase {
         XCTAssertTrue(driver.streams.allSatisfy { $0.stopCount == 1 })
     }
 
+    func testWarmCacheHitKeepsUsedImageAheadOfUnusedImageAtSameBudget() async throws {
+        let frames = try (0 ..< 3).map { _ in try makeOverviewPreviewFrame() }
+        let driver = OverviewPreviewTestDriver()
+        let budget = frames[0].surface.allocationSize * 2
+        let capture = driver.makeCapture(maximumRetainedBytes: budget)
+        let preview = makePreview(capture)
+        let first = item(1)
+        let reused = item(2)
+        let third = item(3)
+        preview.warm(source: [first], destination: [reused], monitor: monitor)
+        await driver.waitForStarts(2)
+        driver.completeAllStarts()
+        await publish(frames[0], through: driver.streams[0], into: capture)
+        await publish(frames[1], through: driver.streams[1], into: capture)
+        await driver.waitForStops(2)
+        preview.warm(source: [reused], destination: [], monitor: monitor)
+        XCTAssertFalse(capture.hasPendingFirstFrames)
+        XCTAssertEqual(driver.streams.count, 2)
+        preview.warm(source: [third], destination: [], monitor: monitor)
+        await driver.waitForStarts(3)
+        driver.completeAllStarts()
+        await publish(frames[2], through: driver.streams[2], into: capture)
+        await driver.waitForStops(3)
+        XCTAssertEqual(capture.cachedByteCount, budget)
+        XCTAssertNil(capture.preview(for: first.handle))
+        XCTAssertTrue(capture.preview(for: reused.handle) === frames[1])
+        XCTAssertTrue(capture.preview(for: third.handle) === frames[2])
+        preview.stop()
+        capture.releaseCache()
+    }
+
+    func testWorldRemovalReleasesAnUnrepresentedSwipePreviewAndRejectsLateFrames() async throws {
+        let controller = WindowAdmissionTestSupport.controller()
+        let driver = OverviewPreviewTestDriver()
+        let capture = driver.makeCapture()
+        let preview = makePreview(capture)
+        controller.layoutRefreshController.workspaceSwipe = WorkspaceSwipePresentation(
+            refreshController: controller.layoutRefreshController, previewSurface: preview
+        )
+        defer {
+            preview.stop()
+            controller.axEventHandler.cleanup()
+            controller.layoutRefreshController.resetState()
+            controller.axManager.cleanup()
+        }
+        let workspace = try XCTUnwrap(controller.workspaceManager.workspaceId(for: "1", createIfMissing: true))
+        var items: [WorkspaceSwipePreview.Item] = []
+        for index in 0 ..< 3 {
+            let token = WindowToken(pid: 999_971, windowId: 999_972 + index)
+            _ = WindowAdmissionTestSupport.track(token, in: workspace, controller: controller)
+            items.append(.init(
+                handle: try XCTUnwrap(controller.workspaceManager.handle(for: token)),
+                frame: CGRect(x: 0, y: 30, width: 800, height: 600)
+            ))
+        }
+        let frames = try (0 ..< 2).map { _ in try makeOverviewPreviewFrame() }
+        for index in 0 ..< 2 {
+            preview.warm(source: [items[index]], destination: [], monitor: monitor)
+            await driver.waitForStarts(index + 1)
+            driver.completeAllStarts()
+            await publish(frames[index], through: driver.streams[index], into: capture)
+            await driver.waitForStops(index + 1)
+        }
+        XCTAssertTrue(capture.preview(for: items[0].handle) === frames[0])
+        controller.workspaceManager.removeWindow(pid: items[0].handle.pid, windowId: items[0].handle.windowId)
+        XCTAssertNil(capture.preview(for: items[0].handle))
+        XCTAssertEqual(capture.cachedByteCount, frames[1].surface.allocationSize)
+        XCTAssertTrue(capture.preview(for: items[1].handle) === frames[1])
+
+        preview.warm(source: [items[2]], destination: [], monitor: monitor)
+        await driver.waitForStarts(3)
+        controller.workspaceManager.removeWindow(pid: items[2].handle.pid, windowId: items[2].handle.windowId)
+        XCTAssertFalse(capture.hasPendingFirstFrames)
+        driver.streams[2].output.offer(frames[0])
+        XCTAssertNil(driver.streams[2].output.take())
+        XCTAssertNil(capture.preview(for: items[2].handle))
+        preview.stop()
+        driver.completeAllStarts()
+        await driver.waitForStops(3)
+        capture.releaseCache()
+    }
+
     private func makePreview(_ capture: OverviewThumbnailCapture) -> WorkspaceSwipePreview {
         WorkspaceSwipePreview(
             ownedWindowRegistry: OwnedWindowRegistry(), previewCapture: capture, hasCaptureAccess: { true }

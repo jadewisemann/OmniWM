@@ -2,6 +2,7 @@
 // Copyright (C) 2026 BarutSRB — https://github.com/OmniNull/OmniWM
 
 import CoreGraphics
+import Dispatch
 import Foundation
 import QuartzCore
 
@@ -61,13 +62,13 @@ extension LayoutRefreshController {
                 continue
             }
             guard let windowId = UInt32(exactly: entry.windowId) else { continue }
-            guard controller.workspaceManager.hiddenState(for: entry.token) != nil else {
+            guard let hidden = controller.workspaceManager.hiddenState(for: entry.token) else {
                 visible.append(entry.windowId)
                 appendVisibleWindowAudit(entry, windowId: windowId, controller: controller, strays: &strays)
                 continue
             }
-            guard let bounds = SkyLight.shared.getWindowBounds(windowId) else { continue }
-            let frame = ScreenCoordinateSpace.toAppKit(rect: bounds)
+            guard let frame = readHiddenWindowAudit(entry, windowId: windowId, hidden: hidden, controller: controller)
+            else { continue }
             let overlap = monitorFrames
                 .map { $0.intersection(frame) }
                 .filter { !$0.isNull && !$0.isEmpty }
@@ -96,6 +97,29 @@ extension LayoutRefreshController {
 }
 
 extension LayoutRefreshController {
+    private func readHiddenWindowAudit(
+        _ entry: WindowState, windowId: UInt32, hidden: HiddenState, controller: WMController
+    ) -> CGRect? {
+        let readStartNs = DispatchTime.now().uptimeNanoseconds
+        let bounds = SkyLight.shared.getWindowBounds(windowId)
+        let readEndNs = DispatchTime.now().uptimeNanoseconds
+        let frame = bounds.map { ScreenCoordinateSpace.toAppKit(rect: $0) }
+        if FrameApplyTrace.shared.isActive {
+            let handle = controller.workspaceManager.handle(for: entry.token).map(ObjectIdentifier.init)
+            let request = controller.axManager.pendingParkFrameRequest(for: entry.windowId)
+            FrameApplyTrace.recordEvent(
+                pid: entry.pid, windowId: entry.windowId,
+                outcome: "outcome=hidden-park-sample reason=\(hidden.reason) handle=\(String(describing: handle))"
+                    + " pending=\(controller.axManager.pendingParkWindowIds.contains(entry.windowId))",
+                target: controller.axManager.parkTargetFrame(for: entry.windowId), observed: frame,
+                confirmed: controller.axManager.verifiedParkFrame(for: entry.windowId),
+                requestId: request?.requestId ?? 0, traceRequestId: request?.traceRequestId ?? 0,
+                lane: .park, uptimeNs: readEndNs, readStartedNs: readStartNs
+            )
+        }
+        return frame
+    }
+
     private func appendVisibleWindowAudit(
         _ entry: WindowState, windowId: UInt32, controller: WMController, strays: inout [String]
     ) {

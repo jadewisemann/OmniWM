@@ -23,15 +23,18 @@ public struct IPCCommandsQueryResult: Codable, Equatable, Sendable {
     public let commands: [IPCCommandDescriptor]
     public let workspaceActions: [IPCWorkspaceActionDescriptor]
     public let windowActions: [IPCWindowActionDescriptor]
+    public let windowMarkActions: [IPCWindowMarkActionDescriptor]
 
     public init(
         commands: [IPCCommandDescriptor],
         workspaceActions: [IPCWorkspaceActionDescriptor],
-        windowActions: [IPCWindowActionDescriptor]
+        windowActions: [IPCWindowActionDescriptor],
+        windowMarkActions: [IPCWindowMarkActionDescriptor]
     ) {
         self.commands = commands
         self.workspaceActions = workspaceActions
         self.windowActions = windowActions
+        self.windowMarkActions = windowMarkActions
     }
 }
 
@@ -54,6 +57,7 @@ public struct IPCCapabilitiesQueryResult: Codable, Equatable, Sendable {
     public let ruleActions: [IPCRuleActionDescriptor]
     public let workspaceActions: [IPCWorkspaceActionDescriptor]
     public let windowActions: [IPCWindowActionDescriptor]
+    public let windowMarkActions: [IPCWindowMarkActionDescriptor]
     public let subscriptions: [IPCSubscriptionDescriptor]
 
     public init(
@@ -67,6 +71,7 @@ public struct IPCCapabilitiesQueryResult: Codable, Equatable, Sendable {
         ruleActions: [IPCRuleActionDescriptor],
         workspaceActions: [IPCWorkspaceActionDescriptor],
         windowActions: [IPCWindowActionDescriptor],
+        windowMarkActions: [IPCWindowMarkActionDescriptor],
         subscriptions: [IPCSubscriptionDescriptor]
     ) {
         self.protocolVersion = protocolVersion
@@ -79,6 +84,7 @@ public struct IPCCapabilitiesQueryResult: Codable, Equatable, Sendable {
         self.ruleActions = ruleActions
         self.workspaceActions = workspaceActions
         self.windowActions = windowActions
+        self.windowMarkActions = windowMarkActions
         self.subscriptions = subscriptions
     }
 }

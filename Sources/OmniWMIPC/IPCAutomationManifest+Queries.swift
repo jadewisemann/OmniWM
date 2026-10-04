@@ -17,6 +17,7 @@ extension IPCAutomationManifest {
         "layout-reason",
         "manual-override",
         "is-focused",
+        "is-fullscreen",
         "is-visible",
         "is-app-hidden",
         "is-scratchpad",

@@ -57,7 +57,7 @@ extension WorkspaceNavigationHandler {
         let token = handle.id
         guard let entry = workspaceManager.entry(for: token),
               workspaceManager.handle(for: token) === handle,
-              !workspaceManager.isAppHidden(pid: entry.pid),
+              !workspaceManager.isWindowSuppressedByMacOS(entry.token),
               entry.mode == .floating,
               entry.workspaceId != targetWorkspaceId,
               workspaceManager.descriptor(for: targetWorkspaceId) != nil,

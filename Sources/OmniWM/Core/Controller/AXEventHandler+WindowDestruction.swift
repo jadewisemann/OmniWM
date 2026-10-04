@@ -6,7 +6,7 @@ import Foundation
 
 extension AXEventHandler {
     private func prepareDestroyCandidate(
-        windowId: UInt32,
+        windowInfo: WindowServerInfo?,
         token: WindowToken?,
         evidence: WindowDestroyEvidence
     ) -> PreparedDestroy? {
@@ -18,7 +18,7 @@ extension AXEventHandler {
         }
 
         let bundleId = resolveBundleId(token.pid) ?? entry.managedReplacementMetadata?.bundleId
-        let windowInfo = WMController.exactWindowServerInfo(resolveWindowInfo(windowId), for: token)
+        let windowInfo = WMController.exactWindowServerInfo(windowInfo, for: token)
         let cachedMetadata = overlayWindowServerInfo(
             windowInfo,
             onto: cachedManagedReplacementMetadata(
@@ -60,7 +60,21 @@ extension AXEventHandler {
         callbackGeneration: UInt64? = nil,
         evidence: WindowDestroyEvidence
     ) {
-        let identityResolution = resolveWindowServerIdentity(windowId)
+        handleWindowDestroyed(
+            windowId: windowId, pidHint: pidHint, expectedWindow: expectedWindow,
+            callbackGeneration: callbackGeneration, evidence: evidence, windowInfo: resolveWindowInfo(windowId)
+        )
+    }
+
+    func handleWindowDestroyed(
+        windowId: UInt32,
+        pidHint: pid_t?,
+        expectedWindow: AXWindowRef? = nil,
+        callbackGeneration: UInt64? = nil,
+        evidence: WindowDestroyEvidence,
+        windowInfo: WindowServerInfo?
+    ) {
+        let identityResolution = WindowServerIdentityResolution(windowId: windowId, info: windowInfo)
         let trackedToken = resolveTrackedTokenForDestruction(
             windowId,
             pidHint: pidHint,
@@ -84,7 +98,7 @@ extension AXEventHandler {
         )
 
         guard let candidate = prepareDestroyCandidate(
-            windowId: windowId,
+            windowInfo: windowInfo,
             token: trackedToken,
             evidence: evidence
         ) else {
@@ -166,7 +180,7 @@ extension AXEventHandler {
         }
         if let resolvedToken {
             scheduleWindowRuleReevaluationIfNeeded(targets: [.pid(resolvedToken.pid)])
-        } else if let pid = pidHint ?? resolveWindowInfo(windowId)?.pid {
+        } else if let pid = pidHint {
             scheduleWindowRuleReevaluationIfNeeded(targets: [.pid(pid_t(pid))])
         }
     }

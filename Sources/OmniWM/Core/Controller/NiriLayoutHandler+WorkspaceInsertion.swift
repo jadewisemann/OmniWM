@@ -72,7 +72,7 @@ extension NiriLayoutHandler {
         guard let wsId = controller.activeWorkspace()?.id else { return }
         guard let monitor = controller.workspaceManager.monitor(for: wsId) else { return }
         let motion = controller.motionPolicy.snapshot()
-        let workingFrame = controller.insetWorkingFrame(for: monitor)
+        let workingFrame = controller.niriWorkingFrame(for: monitor)
         let gaps = controller.innerGap(for: monitor)
         let orientation = resolvedOrientation(for: wsId, monitor: monitor, engine: engine)
         controller.workspaceManager.withNiriViewportState(for: wsId) { state in
@@ -98,7 +98,7 @@ extension NiriLayoutHandler {
         guard let engine = controller.niriEngine else { return }
         guard let monitor = controller.workspaceManager.monitor(for: workspaceId) else { return }
         let motion = controller.motionPolicy.snapshot()
-        let workingFrame = controller.insetWorkingFrame(for: monitor)
+        let workingFrame = controller.niriWorkingFrame(for: monitor)
         let gaps = controller.innerGap(for: monitor)
         let orientation = resolvedOrientation(for: workspaceId, monitor: monitor, engine: engine)
         controller.workspaceManager.withNiriViewportState(for: workspaceId) { state in
@@ -119,11 +119,11 @@ extension NiriLayoutHandler {
               let sourceEntry = controller.workspaceManager.entry(for: handle.id),
               sourceEntry.workspaceId == workspaceId,
               controller.workspaceManager.handle(for: handle.id) === handle,
-              !controller.workspaceManager.isAppHidden(pid: sourceEntry.pid),
+              !controller.workspaceManager.isWindowSuppressedByMacOS(sourceEntry.token),
               let targetEntry = controller.workspaceManager.entry(for: targetHandle.id),
               targetEntry.workspaceId == workspaceId,
               controller.workspaceManager.handle(for: targetHandle.id) === targetHandle,
-              !controller.workspaceManager.isAppHidden(pid: targetEntry.pid)
+              !controller.workspaceManager.isWindowSuppressedByMacOS(targetEntry.token)
         else {
             return false
         }
@@ -165,7 +165,7 @@ extension NiriLayoutHandler {
               let entry = controller.workspaceManager.entry(for: handle.id),
               entry.workspaceId == workspaceId,
               controller.workspaceManager.handle(for: handle.id) === handle,
-              !controller.workspaceManager.isAppHidden(pid: entry.pid)
+              !controller.workspaceManager.isWindowSuppressedByMacOS(entry.token)
         else {
             return false
         }

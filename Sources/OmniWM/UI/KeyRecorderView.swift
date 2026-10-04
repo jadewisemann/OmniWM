@@ -65,11 +65,11 @@ enum KeyRecorderBindingResolver {
 class KeyRecorderNSView: NSView {
     var onCapture: ((KeyBinding) -> Void)?
     var onCancel: (() -> Void)?
-    var recordingAccessibilityLabel = "Recording hotkey"
+    var recordingAccessibilityLabel = String(localized: "Recording hotkey")
     var allowsBareKeys = false
     var isHyperActive: () -> Bool = { false }
 
-    private let label = NSTextField(labelWithString: "Press keys...")
+    private let label = NSTextField(labelWithString: String(localized: "Press keys..."))
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -104,8 +104,8 @@ class KeyRecorderNSView: NSView {
     func updateAccessibility() {
         setAccessibilityRole(.group)
         setAccessibilityLabel(recordingAccessibilityLabel)
-        setAccessibilityValue("Recording. Press a key combination.")
-        setAccessibilityHelp("Press a key combination. Press Escape to cancel recording.")
+        setAccessibilityValue(String(localized: "Recording. Press a key combination."))
+        setAccessibilityHelp(String(localized: "Press a key combination. Press Escape to cancel recording."))
     }
 
     override func becomeFirstResponder() -> Bool {

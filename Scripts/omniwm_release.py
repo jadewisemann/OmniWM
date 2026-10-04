@@ -19,13 +19,14 @@ DEFAULT_MAIN_REPO = Path("/Users/barut/OmniWM/OmniWM")
 DEFAULT_GITHUB_REPO = "OmniNull/OmniWM"
 SIGNING_IDENTITY = "Developer ID Application: Oliver Nikolic (VF8LDJRGFM)"
 NOTARIZE_PROFILE = "OmniWM-Notarize"
-MANIFEST_SCHEMA = 3
-PUBLIC_STAGES = ("main", "tag", "release")
-LEGACY_PUBLIC_STAGES = (*PUBLIC_STAGES, "tap")
+MANIFEST_SCHEMA = 4
+PUBLIC_STAGES = ("tag", "release", "main")
+PREVIOUS_PUBLIC_STAGES = ("main", "tag", "release")
+LEGACY_PUBLIC_STAGES = (*PREVIOUS_PUBLIC_STAGES, "tap")
 DESTINATIONS = ("main_remote", "github_repo")
 LEGACY_DESTINATIONS = (*DESTINATIONS, "tap_remote", "tap_github_repo")
 LOCAL_RELEASE_STATES = {"preparing", "recovered-local-checkpoint", "prepared"}
-SEALED_RELEASE_STATES = {"sealed", "published-main", "published-tag", "published"}
+SEALED_RELEASE_STATES = {"sealed", "published-tag", "published-release", "published"}
 RELEASE_STATES = LOCAL_RELEASE_STATES | SEALED_RELEASE_STATES
 MANIFEST_KEYS = {
     "schema",
@@ -52,6 +53,7 @@ LEGACY_TAP_KEYS = {"original_tap_head", "tap_commit", "cask_sha256"}
 LEGACY_MANIFEST_KEYS = {
     1: MANIFEST_KEYS | LEGACY_TAP_KEYS,
     2: MANIFEST_KEYS | LEGACY_TAP_KEYS | {"tap_checkout"},
+    3: MANIFEST_KEYS,
 }
 
 
@@ -152,7 +154,9 @@ def parse_version(version):
 
 
 def manifest_stages(manifest):
-    return PUBLIC_STAGES if manifest["schema"] == MANIFEST_SCHEMA else LEGACY_PUBLIC_STAGES
+    if manifest["schema"] == MANIFEST_SCHEMA:
+        return PUBLIC_STAGES
+    return PREVIOUS_PUBLIC_STAGES if manifest["schema"] == 3 else LEGACY_PUBLIC_STAGES
 
 
 def sha256_file(path: Path) -> str:
@@ -264,6 +268,72 @@ class ReleaseManager:
             "source": dist / f"release-source-v{version}.txt",
         }
 
+    def ghostty_pins(self):
+        values = {}
+        for name in ("dev-tools.env", "build-metadata.env"):
+            for line in (self.main / "Scripts" / name).read_text(encoding="utf-8").splitlines():
+                if not line or line.startswith("#"):
+                    continue
+                key, separator, value = line.partition("=")
+                require(separator and key not in values, f"invalid or duplicate metadata key: {key}")
+                values[key] = value
+        for key in ("OMNIWM_GHOSTTY_ZIP_SHA256", "OMNIWM_GHOSTTY_ARCHIVE_SHA256"):
+            require(re.fullmatch(r"[0-9a-f]{64}", values.get(key, "")) is not None, f"invalid {key}")
+        require(values.get("OMNIWM_GHOSTTY_DOWNLOAD_URL", "").startswith("https://"), "invalid Ghostty download URL")
+        return values
+
+    def ghostty_release_url(self, version):
+        return (
+            f"https://github.com/{self.config.github_repo}/releases/download/{self.tag(version)}/"
+            f"{self.asset_paths(version)['ghostty'].name}"
+        )
+
+    def framework_hashes(self, framework):
+        return {
+            str(path.relative_to(framework)): sha256_file(path)
+            for path in framework.rglob("*")
+            if path.is_file()
+            and path.name != ".DS_Store"
+            and not path.name.startswith("._")
+            and "__MACOSX" not in path.parts
+        }
+
+    def verify_ghostty_dependency(self, version, published=False):
+        pins = self.ghostty_pins()
+        url = pins["OMNIWM_GHOSTTY_DOWNLOAD_URL"]
+        pending = url == self.ghostty_release_url(version)
+        self.runner.run(["bash", "Scripts/ghostty-preflight.sh", "verify"], cwd=self.main)
+        with tempfile.TemporaryDirectory(prefix="omniwm-ghostty-dependency-") as raw:
+            root = Path(raw)
+            if pending and not published:
+                archive = self.asset_paths(version)["ghostty"]
+                require(archive.is_file(), f"missing prevalidated release dependency ZIP: {archive}")
+            else:
+                archive = root / "GhosttyKit.zip"
+                self.runner.run(
+                    ["curl", "--disable", "--fail", "--location", "--silent", "--show-error", "--output", archive, url],
+                    cwd=self.main,
+                )
+            require(sha256_file(archive) == pins["OMNIWM_GHOSTTY_ZIP_SHA256"], "Ghostty dependency ZIP hash mismatch")
+            (root / "Frameworks").mkdir()
+            (root / "Scripts").mkdir()
+            self.runner.run(["ditto", "-x", "-k", archive, root / "Frameworks"], cwd=self.main)
+            for name in ("ghostty-preflight.sh", "build-metadata.env"):
+                shutil.copy2(self.main / "Scripts" / name, root / "Scripts" / name)
+            self.runner.run(["bash", root / "Scripts/ghostty-preflight.sh", "verify"], cwd=root)
+            require(
+                self.framework_hashes(root / "Frameworks/GhosttyKit.xcframework")
+                == self.framework_hashes(self.main / "Frameworks/GhosttyKit.xcframework"),
+                "Ghostty dependency contents differ from the installed framework",
+            )
+        return "validated local release asset; public download required before main push" if pending and not published else url
+
+    def package_ghostty(self, version):
+        if self.ghostty_pins()["OMNIWM_GHOSTTY_DOWNLOAD_URL"] == self.ghostty_release_url(version):
+            self.verify_ghostty_dependency(version)
+        else:
+            self.create_zip(self.main / "Frameworks/GhosttyKit.xcframework", self.asset_paths(version)["ghostty"])
+
     def load_manifest(self, version):
         path = self.manifest_path(version)
         require(path.exists(), f"missing release manifest: {path}")
@@ -300,7 +370,8 @@ class ReleaseManager:
             "manifest previous version must be older than the release version",
         )
         require(
-            isinstance(value["state"], str) and value["state"] in RELEASE_STATES,
+            isinstance(value["state"], str)
+            and value["state"] in (RELEASE_STATES | {"published-main"} if legacy else RELEASE_STATES),
             "manifest state is invalid",
         )
         require(
@@ -348,7 +419,7 @@ class ReleaseManager:
         )
         require(
             isinstance(value["destinations"], dict)
-            and set(value["destinations"]) == set(LEGACY_DESTINATIONS if legacy else DESTINATIONS)
+            and set(value["destinations"]) == set(LEGACY_DESTINATIONS if schema in {1, 2} else DESTINATIONS)
             and all(
                 isinstance(destination, str) and destination
                 for destination in value["destinations"].values()
@@ -381,8 +452,8 @@ class ReleaseManager:
             "recovered-local-checkpoint": 0,
             "prepared": 0,
             "sealed": 0,
-            "published-main": 1,
-            "published-tag": 2,
+            "published-tag": 1,
+            "published-release": 2,
             "published": 3,
         }[state]
         expected_published = {
@@ -426,7 +497,7 @@ class ReleaseManager:
         else:
             require(value["sealed"], "published release manifest must be sealed")
             require(value["notes_sha256"] is not None, "sealed release manifest lacks notes hash")
-        if published_prefix < len(PUBLIC_STAGES):
+        if not value["published"]["release"]:
             require(value["release_url"] is None, "release URL exists before GitHub publication")
         else:
             expected_url = (
@@ -582,6 +653,7 @@ class ReleaseManager:
             "spctl",
             "syspolicy_check",
             "ditto",
+            "curl",
             "xattr",
             "security",
         ]
@@ -748,6 +820,7 @@ class ReleaseManager:
             "target version must be newer than Info.plist",
         )
         require(plan["commits"], f"no unreleased commits after {plan['previous_tag']}")
+        print(f"Ghostty dependency: {self.verify_ghostty_dependency(plan['version'])}")
 
     def release_bullets(self, commits):
         verbs = {
@@ -955,7 +1028,7 @@ class ReleaseManager:
             embedded_hash=embedded,
             signing_identity=self.config.signing_identity,
         )
-        self.create_zip(self.main / "Frameworks" / "GhosttyKit.xcframework", paths["ghostty"])
+        self.package_ghostty(version)
         self.create_release_text(
             version,
             plan["previous_version"],
@@ -990,6 +1063,7 @@ class ReleaseManager:
         version = manifest["version"]
         self.verify_destinations(manifest)
         paths = self.asset_paths(version)
+        self.require_clean_worktree(self.main, "release worktree must match the frozen commit")
         require(self.repo_state(self.main).branch == "main", "main repo must remain on main")
         require(self.git(self.main, "rev-parse", "HEAD") == manifest["release_commit"], "main HEAD differs from release commit")
         require(self.local_tag_commit(manifest["tag"]) == manifest["release_commit"], "local tag does not match release commit")
@@ -1007,6 +1081,7 @@ class ReleaseManager:
             path = Path(manifest["assets"][key]["path"])
             require(path.exists(), f"missing {key} asset: {path}")
             require(sha256_file(path) == manifest["assets"][key]["sha256"], f"{key} asset hash drift")
+        self.verify_ghostty_dependency(version)
         require(paths["notes"].exists(), f"missing notes: {paths['notes']}")
         self.verify_app_zip(
             Path(manifest["assets"]["app"]["path"]),
@@ -1035,10 +1110,10 @@ class ReleaseManager:
         self.verify_manifest(manifest, seal=True)
         self.print_status(manifest)
 
-    def ensure_main_published(self, manifest):
+    def require_publishable_main(self, manifest):
         remote = self.git(self.main, "rev-parse", "origin/main")
         if remote == manifest["release_commit"]:
-            return
+            return True
         if self.runner.run(
             ["git", "merge-base", "--is-ancestor", manifest["release_commit"], remote],
             cwd=self.main,
@@ -1056,6 +1131,13 @@ class ReleaseManager:
             == 0,
             "origin/main has diverged from the prepared release commit",
         )
+        return False
+
+    def ensure_main_published(self, manifest):
+        already_published = self.require_publishable_main(manifest)
+        self.verify_ghostty_dependency(manifest["version"], published=True)
+        if already_published:
+            return
         self.runner.run(["git", "push", "origin", "main"], cwd=self.main, capture=False)
         self.runner.run(["git", "fetch", "origin"], cwd=self.main)
         require(self.git(self.main, "rev-parse", "origin/main") == manifest["release_commit"], "main push did not publish sealed commit")
@@ -1144,6 +1226,7 @@ class ReleaseManager:
         self.verify_destinations(manifest)
         self.fetch()
         self.verify_manifest(manifest, seal=False)
+        self.require_publishable_main(manifest)
         handlers = {
             "main": self.ensure_main_published,
             "tag": self.ensure_tag_published,
@@ -1274,7 +1357,11 @@ class ReleaseManager:
             "Info.plist",
             "website/src/data/site.ts",
         )
-        for path in self.asset_paths(version).values():
+        paths = self.asset_paths(version)
+        keep_dependency = self.ghostty_pins()["OMNIWM_GHOSTTY_DOWNLOAD_URL"] == self.ghostty_release_url(version)
+        for path in paths.values():
+            if keep_dependency and path == paths["ghostty"]:
+                continue
             path.unlink(missing_ok=True)
         self.manifest_path(version).unlink(missing_ok=True)
         print(f"Aborted local release {version}; no public state was changed")

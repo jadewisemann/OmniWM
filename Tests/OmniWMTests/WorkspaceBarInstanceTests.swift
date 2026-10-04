@@ -28,17 +28,17 @@ final class WorkspaceBarInstanceTests: XCTestCase {
         let snapshot = instance.model.snapshot
         defer { instance.primary.panel.close() }
 
-        XCTAssertEqual(instance.measuredWidth(for: snapshot, slice: .all, showsSystemStatsButton: false), 120)
+        XCTAssertEqual(instance.measuredLength(for: snapshot, slice: .all, showsSystemStatsButton: false), 120)
         XCTAssertEqual(fixture.measurementView.measurementCount, 1)
         instance.updateSnapshot(snapshot)
-        XCTAssertEqual(instance.measuredWidth(for: snapshot, slice: .all, showsSystemStatsButton: false), 120)
+        XCTAssertEqual(instance.measuredLength(for: snapshot, slice: .all, showsSystemStatsButton: false), 120)
         XCTAssertEqual(fixture.measurementView.measurementCount, 1)
 
         let changed = snapshot.replacingScratchpads([
             WorkspaceBarScratchpadItem(index: 1, label: "Terminal", windows: [], isVisible: false)
         ])
         instance.updateSnapshot(changed)
-        XCTAssertEqual(instance.measuredWidth(for: changed, slice: .all, showsSystemStatsButton: false), 120)
+        XCTAssertEqual(instance.measuredLength(for: changed, slice: .all, showsSystemStatsButton: false), 120)
         XCTAssertEqual(fixture.measurementView.measurementCount, 2)
         XCTAssertEqual(instance.model.snapshot, changed)
     }
@@ -73,7 +73,7 @@ final class WorkspaceBarInstanceTests: XCTestCase {
 
     func testRepeatedFrameDoesNotApplyAgainAndRetargetingUsesSamePanel() {
         let fixture = makeFixture()
-        var island = fixture.instance.primary
+        let island = fixture.instance.primary
         let panel = island.panel
         let initial = NSRect(x: 100, y: 740, width: 120, height: 24)
         let retargeted = initial.offsetBy(dx: 80, dy: 0)
@@ -91,6 +91,24 @@ final class WorkspaceBarInstanceTests: XCTestCase {
         XCTAssertEqual(island.lastAppliedFrame, retargeted)
     }
 
+    func testFrameApplicationAllowsSynchronousIslandRead() {
+        let fixture = makeFixture()
+        let instance = fixture.instance
+        let panel = instance.primary.panel
+        let frame = NSRect(x: 100, y: 740, width: 120, height: 24)
+        var applied = false
+        defer { panel.close() }
+
+        instance.primary.applyFrame(frame) { target, _ in
+            applied = true
+            XCTAssertTrue(instance.primary.panel === target)
+            XCTAssertEqual(instance.primary.slice, .all)
+        }
+
+        XCTAssertTrue(applied)
+        XCTAssertEqual(instance.primary.lastAppliedFrame, frame)
+    }
+
     func testFillModeCompactsAgainstPanelWidthAndRecalculatesAfterModeAndMonitorChanges() {
         let fixture = makeFixture(barHeight: 28)
         let instance = fixture.instance
@@ -101,7 +119,7 @@ final class WorkspaceBarInstanceTests: XCTestCase {
             WorkspaceBarScratchpadItem(index: $0, label: "Scratchpad number \($0)", windows: [], isVisible: false)
         })
         let frame = WorkspaceBarGeometry.resolve(monitor: monitor, resolved: resolved, isVisible: true)
-            .frame(fittingWidth: 0, monitor: monitor, resolved: resolved)
+            .frame(fittingLength: 0, monitor: monitor, resolved: resolved)
         let expandedWidth = 120 + WorkspaceBarScratchpadLayout.estimatedWidth(
             of: snapshot.scratchpads,
             barHeight: snapshot.barHeight

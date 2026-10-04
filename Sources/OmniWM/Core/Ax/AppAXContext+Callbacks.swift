@@ -54,32 +54,25 @@ extension AppAXContext {
         }
     }
 
-    nonisolated static func handleWindowMiniaturizedCallback(
+    nonisolated static func handleWindowMinimizedCallback(
         pid: pid_t,
-        element: AXUIElement,
+        axRef: AXWindowRef,
+        minimized: Bool,
         observerKey: UInt,
         callbackGeneration: UInt64?,
-        refcon: UnsafeMutableRawPointer?,
         registry: AXCallbackGenerationRegistry = appAXCallbackGenerationRegistry,
         postEvent: (IntakeEvent) -> Void = { EventIntake.post($0) }
     ) {
-        guard let windowId = destroyNotificationWindowId(from: refcon) else {
-            assertionFailure("Received AX miniaturize callback without a valid windowId refcon")
-            return
-        }
         registry.performIfCurrentWindowNotification(
             observerKey: observerKey,
-            windowId: windowId,
-            element: element,
-            notification: .miniaturized
+            windowId: axRef.windowId,
+            element: axRef.element,
+            notification: minimized ? .miniaturized : .deminiaturized
         ) {
-            postEvent(
-                .axWindow(.windowMiniaturized(
-                    pid: pid,
-                    windowId: windowId,
-                    callbackGeneration: callbackGeneration
-                ))
-            )
+            let event: AXWindowIntakeEvent = minimized
+                ? .windowMiniaturized(pid: pid, axRef: axRef, callbackGeneration: callbackGeneration)
+                : .windowDeminiaturized(pid: pid, axRef: axRef, callbackGeneration: callbackGeneration)
+            postEvent(.axWindow(event))
         }
     }
 }
@@ -105,7 +98,8 @@ func axWindowNotificationCallback(
 
     let isDestroyed = notificationName == (kAXUIElementDestroyedNotification as String)
     let isMiniaturized = notificationName == (kAXWindowMiniaturizedNotification as String)
-    guard isDestroyed || isMiniaturized else { return }
+    let isDeminiaturized = notificationName == (kAXWindowDeminiaturizedNotification as String)
+    guard isDestroyed || isMiniaturized || isDeminiaturized else { return }
     guard pidStatus == .success else { return }
 
     DiagnosticsEventRecorder.shared.recordLifecycle(name: notificationName, pid: pid)
@@ -118,12 +112,16 @@ func axWindowNotificationCallback(
             refcon: refcon
         )
     } else {
-        AppAXContext.handleWindowMiniaturizedCallback(
+        guard let windowId = AppAXContext.destroyNotificationWindowId(from: refcon) else {
+            assertionFailure("Received AX minimization callback without a valid windowId refcon")
+            return
+        }
+        AppAXContext.handleWindowMinimizedCallback(
             pid: pid,
-            element: element,
+            axRef: AXWindowRef(element: element, windowId: windowId),
+            minimized: isMiniaturized,
             observerKey: observerKey,
-            callbackGeneration: callbackGeneration,
-            refcon: refcon
+            callbackGeneration: callbackGeneration
         )
     }
 }

@@ -8,6 +8,55 @@ import XCTest
 
 @MainActor
 final class WorkspaceSwipePresentationTests: XCTestCase {
+    func testPreparedDynamicDestinationSurvivesRefreshUntilContactEnds() throws {
+        let (controller, swipe, monitor, _) = try fixture()
+        let manager = controller.workspaceManager
+        let dynamic = try XCTUnwrap(manager.createDynamicWorkspace(named: "99", on: monitor.id))
+        _ = swipe.prepare(monitorId: monitor.id, timestamp: 1)
+        XCTAssertEqual(swipe.preparation?.previous?.id, dynamic.id)
+        let refreshController = controller.layoutRefreshController
+        refreshController.finishRefresh(
+            .init(kind: .immediateRelayout, reason: .workspaceTransition),
+            didComplete: true, generation: refreshController.layoutState.refreshGeneration
+        )
+        XCTAssertNotNil(manager.descriptor(for: dynamic.id))
+
+        swipe.stopPreparing(warm: true)
+
+        XCTAssertNil(manager.descriptor(for: dynamic.id))
+    }
+
+    func testDynamicSourceSurvivesCommittedSwipeUntilPlacementCompletes() throws {
+        let (controller, swipe, monitor, configuredId) = try fixture()
+        let manager = controller.workspaceManager
+        let dynamic = try XCTUnwrap(manager.createDynamicWorkspace(named: "99", on: monitor.id))
+        XCTAssertTrue(manager.setActiveWorkspace(dynamic.id, on: monitor.id))
+        _ = swipe.prepare(monitorId: monitor.id, timestamp: 1)
+        swipe.begin(axis: .vertical, cumulative: 20, timestamp: 1.01)
+        XCTAssertEqual(swipe.flight?.destination.id, configuredId)
+        XCTAssertTrue(swipe.update(cumulative: 260, timestamp: 1.11))
+        XCTAssertTrue(swipe.release(timestamp: 1.4, allowFlick: true))
+        swipe.tick(displayId: monitor.displayId, timestamp: 3)
+        XCTAssertEqual(manager.activeWorkspace(on: monitor.id)?.id, configuredId)
+        XCTAssertEqual(swipe.flight?.phase, .waitingForPlacement)
+
+        let refreshController = controller.layoutRefreshController
+        let refresh = try XCTUnwrap(refreshController.layoutState.activeRefresh)
+        refreshController.layoutState.activeRefreshTask?.cancel()
+        refreshController.layoutState.didExecuteEffectPlan = true
+        refreshController.finishRefresh(
+            refresh, didComplete: true, generation: refreshController.layoutState.refreshGeneration
+        )
+        XCTAssertNotNil(manager.descriptor(for: dynamic.id))
+        XCTAssertTrue(swipe.hasPresentation)
+
+        swipe.didSubmitPlacement()
+
+        XCTAssertFalse(swipe.hasPresentation)
+        XCTAssertNil(manager.descriptor(for: dynamic.id))
+        XCTAssertNotNil(manager.descriptor(for: configuredId))
+    }
+
     func testSingleRecognitionFrameFlickCommitsForEitherInputSign() throws {
         for cumulative in [-180.0, 180.0] {
             let (controller, swipe, monitor, source) = try fixture()
@@ -228,6 +277,37 @@ final class WorkspaceSwipePresentationTests: XCTestCase {
         XCTAssertNil(swipe.preparation)
     }
 
+    func testWorkspaceBarPointerSelectionKeepsOriginWhileAnimatedSwitchWaitsForCapture() throws {
+        let driver = OverviewPreviewTestDriver()
+        let preview = WorkspaceSwipePreview(
+            ownedWindowRegistry: OwnedWindowRegistry(), previewCapture: driver.makeCapture(),
+            backdrop: try makeBackdrop(), hasCaptureAccess: { true }
+        )
+        let (controller, swipe, monitor, source) = try fixture(previewSurface: preview)
+        defer { swipe.cancelPendingSwitch(reason: "test-complete") }
+        controller.hasStartedServices = true
+        controller.niriLayoutHandler.enableNiriLayout()
+        let token = controller.workspaceManager.addWindow(
+            AXWindowRef(element: AXUIElementCreateApplication(764_951), windowId: 764_952),
+            pid: 764_951, windowId: 764_952, to: source
+        )
+        controller.workspaceManager.setCachedConstraints(.unconstrained, for: token)
+        let engine = try XCTUnwrap(controller.niriEngine)
+        let node = engine.addWindow(token: token, to: source, afterSelection: nil)
+        controller.workspaceManager.withNiriViewportState(for: source) { $0.selectedNodeId = node.id }
+        controller.axManager.confirmFrameWrite(
+            for: token.windowId, frame: CGRect(x: 50, y: 50, width: 600, height: 500)
+        )
+        let destination = try XCTUnwrap(controller.workspaceManager.workspaceId(for: "2", createIfMissing: false))
+
+        XCTAssertTrue(controller.windowActionHandler.focusWorkspaceFromBar(
+            id: destination, focusOrigin: .pointerSelection
+        ))
+        let pending = try XCTUnwrap(swipe.pendingSwitch)
+        XCTAssertEqual(pending.flight.focusOrigin, .pointerSelection)
+        XCTAssertEqual(controller.workspaceManager.activeWorkspace(on: monitor.id)?.id, source)
+    }
+
     func testPhysicalPreparationPromotesOwnerWarmupWithoutRestartingStream() async throws {
         let driver = OverviewPreviewTestDriver()
         let capture = driver.makeCapture()
@@ -344,6 +424,7 @@ final class WorkspaceSwipePresentationTests: XCTestCase {
         let image = try XCTUnwrap(context.makeImage())
         let wallpaper = OverviewWallpaperCache()
         wallpaper.desktopImageURL = { _ in nil }
-        return WorkspaceSwipeBackdrop(wallpaperCache: wallpaper) { _ in image }
+        wallpaper.captureWallpaper = { _ in image }
+        return WorkspaceSwipeBackdrop(wallpaperCache: wallpaper)
     }
 }

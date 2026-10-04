@@ -33,6 +33,20 @@ private actor WindowCloseFocusFactGate {
 }
 
 @MainActor
+private final class WindowCloseLifecycleQueryGate {
+    private var continuation: CheckedContinuation<WindowServerInfo?, Never>?
+
+    func wait() async -> WindowServerInfo? {
+        await withCheckedContinuation { continuation = $0 }
+    }
+
+    func resume(_ info: WindowServerInfo? = nil) {
+        continuation?.resume(returning: info)
+        continuation = nil
+    }
+}
+
+@MainActor
 final class WindowCloseFocusRecoveryTests: XCTestCase {
     private enum SameAppFocusOrder {
         case focusThenDestroy
@@ -92,6 +106,50 @@ final class WindowCloseFocusRecoveryTests: XCTestCase {
         XCTAssertTrue(destroyThenFocus.invariantsAreClean)
     }
 
+    func testPendingCloseQueryHoldsSameAppFocusWhenProbeExpires() async throws {
+        let fixture = try Self.makeFixture()
+        let controller = fixture.controller
+        let handler = controller.axEventHandler
+        let gate = WindowCloseLifecycleQueryGate()
+        defer {
+            handler.cleanup()
+            gate.resume()
+            controller.layoutRefreshController.resetState()
+            Self.stop(fixture)
+        }
+        controller.layoutRefreshController.resetState()
+        let started = expectation(description: "close query suspended")
+        handler.lifecycleQueries.query = { windowId in
+            XCTAssertEqual(windowId, UInt32(fixture.closingToken.windowId))
+            started.fulfill()
+            return await gate.wait()
+        }
+        handler.handleCGSEvent(.closed(windowId: UInt32(fixture.closingToken.windowId)))
+        let queryTask = try XCTUnwrap(handler.lifecycleQueries.task)
+        await fulfillment(of: [started], timeout: 2)
+
+        let probeId = try Self.observeRemoteFocus(in: fixture)
+        controller.deadlineWheel.cancel(intentId: probeId)
+        handler.handleIntentExpired(probeId)
+        controller.eventIntake.drainNow()
+
+        XCTAssertEqual(controller.activeWorkspace()?.id, fixture.localWorkspaceId)
+        XCTAssertEqual(controller.workspaceManager.selectedManagedToken, fixture.closingToken)
+        XCTAssertNotNil(controller.workspaceManager.entry(for: fixture.closingToken))
+        XCTAssertNotNil(controller.intentLedger.openSameAppCloseProbe())
+
+        gate.resume()
+        await queryTask.value
+        await handler.awaitPendingManagedReplacementBursts(for: [fixture.pid])
+        await WindowAdmissionTestSupport.drainLayoutRefreshes(controller)
+
+        XCTAssertEqual(controller.activeWorkspace()?.id, fixture.localWorkspaceId)
+        XCTAssertNotEqual(controller.workspaceManager.selectedManagedToken, fixture.remoteToken)
+        XCTAssertNil(controller.workspaceManager.entry(for: fixture.closingToken))
+        XCTAssertNil(controller.intentLedger.openSameAppCloseProbe())
+        XCTAssertEqual(controller.workspaceManager.invariantViolationCountsDump(), "clean")
+    }
+
     func testSameAppFocusWithoutPendingDestroyStillResolvesAfterProbe() throws {
         let fixture = try Self.makeFixture()
         defer { Self.stop(fixture) }
@@ -106,6 +164,59 @@ final class WindowCloseFocusRecoveryTests: XCTestCase {
         XCTAssertNil(fixture.controller.intentLedger.openSameAppCloseProbe())
     }
 
+    func testPhantomOrFailedLifecycleQueryReleasesExpiredSameAppFocusProbe() async throws {
+        for queryFails in [false, true] {
+            let fixture = try Self.makeFixture()
+            let controller = fixture.controller
+            let handler = controller.axEventHandler
+            let gate = WindowCloseLifecycleQueryGate()
+            defer {
+                handler.cleanup()
+                gate.resume()
+                controller.layoutRefreshController.resetState()
+                Self.stop(fixture)
+            }
+            controller.layoutRefreshController.resetState()
+            let started = expectation(description: "lifecycle query suspended")
+            handler.lifecycleQueries.query = { windowId in
+                XCTAssertEqual(windowId, UInt32(fixture.closingToken.windowId))
+                started.fulfill()
+                let info = await gate.wait()
+                if queryFails { throw AXEventHandler.LifecycleQueryError.unavailable }
+                return info
+            }
+            let windowId = UInt32(fixture.closingToken.windowId)
+            handler.handleCGSEvent(queryFails ? .closed(windowId: windowId) : .destroyed(
+                windowId: windowId,
+                spaceId: 0
+            ))
+            let queryTask = try XCTUnwrap(handler.lifecycleQueries.task)
+            await fulfillment(of: [started], timeout: 2)
+
+            let probeId = try Self.observeRemoteFocus(in: fixture)
+            controller.deadlineWheel.cancel(intentId: probeId)
+            handler.handleIntentExpired(probeId)
+            controller.eventIntake.drainNow()
+
+            XCTAssertEqual(controller.activeWorkspace()?.id, fixture.localWorkspaceId)
+            XCTAssertEqual(controller.intentLedger.openSameAppCloseProbe()?.intent.id, probeId)
+
+            gate.resume(WindowServerInfo(
+                id: windowId, pid: fixture.pid, level: 0,
+                frame: CGRect(x: 700, y: 0, width: 700, height: 800)
+            ))
+            await queryTask.value
+            controller.eventIntake.drainNow()
+
+            XCTAssertEqual(controller.activeWorkspace()?.id, fixture.remoteWorkspaceId)
+            XCTAssertEqual(controller.workspaceManager.selectedManagedToken, fixture.remoteToken)
+            XCTAssertNotNil(controller.workspaceManager.entry(for: fixture.closingToken))
+            XCTAssertNil(controller.intentLedger.openSameAppCloseProbe())
+            XCTAssertNil(handler.lifecycleQueries.deferredCloseProbeExpiration)
+            XCTAssertEqual(controller.workspaceManager.invariantViolationCountsDump(), "clean")
+        }
+    }
+
     func testDelayedSameAppFactsCannotReopenClosedWorkspaceForBothEventOrders() async throws {
         try await Self.verifyDelayedSameAppFacts(order: .focusThenDestroy)
         try await Self.verifyDelayedSameAppFacts(order: .destroyThenFocus)
@@ -115,7 +226,7 @@ final class WindowCloseFocusRecoveryTests: XCTestCase {
         let fixture = try Self.makeFixture()
         defer { Self.stop(fixture) }
 
-        Self.closeFocusedWindow(in: fixture)
+        await Self.closeFocusedWindow(in: fixture)
         fixture.controller.axEventHandler.noteMouseFocusIntent(token: fixture.remoteToken)
         XCTAssertTrue(
             fixture.controller.axEventHandler.handleAppActivation(
@@ -135,7 +246,7 @@ final class WindowCloseFocusRecoveryTests: XCTestCase {
         let fixture = try Self.makeFixture()
         defer { Self.stop(fixture) }
 
-        Self.closeFocusedWindow(in: fixture)
+        await Self.closeFocusedWindow(in: fixture)
         XCTAssertTrue(
             fixture.controller.axEventHandler.handleAppActivation(
                 pid: fixture.pid,
@@ -157,7 +268,7 @@ final class WindowCloseFocusRecoveryTests: XCTestCase {
         fixture.controller.axEventHandler.managedWindowIdentityRebindTargetIsAliveProvider = { _ in true }
         fixture.controller.axEventHandler.managedWindowIdentityRebindAcknowledgementProvider = { _, _ in true }
         fixture.controller.axEventHandler.managedWindowIdentityRebindFinalizationProvider = { _, _ in true }
-        Self.closeFocusedWindow(in: fixture)
+        await Self.closeFocusedWindow(in: fixture)
         _ = try Self.observeRemoteFocus(in: fixture)
 
         let replacementToken = WindowToken(pid: fixture.pid, windowId: 951_105)
@@ -204,7 +315,7 @@ final class WindowCloseFocusRecoveryTests: XCTestCase {
         fixture.controller.axEventHandler.managedWindowIdentityRebindTargetIsAliveProvider = { _ in true }
         fixture.controller.axEventHandler.managedWindowIdentityRebindAcknowledgementProvider = { _, _ in true }
         fixture.controller.axEventHandler.managedWindowIdentityRebindFinalizationProvider = { _, _ in true }
-        Self.closeFocusedWindow(in: fixture)
+        await Self.closeFocusedWindow(in: fixture)
         _ = try Self.observeRemoteFocus(in: fixture)
         let request = fixture.controller.intentLedger.beginManagedRequest(
             token: fixture.rightToken,
@@ -257,7 +368,7 @@ final class WindowCloseFocusRecoveryTests: XCTestCase {
 
         fixture.controller.axEventHandler.managedWindowIdentityRebindTargetIsAliveProvider = { _ in false }
         fixture.controller.axEventHandler.managedWindowIdentityRebindAcknowledgementProvider = { _, _ in true }
-        Self.closeFocusedWindow(in: fixture)
+        await Self.closeFocusedWindow(in: fixture)
         _ = try Self.observeRemoteFocus(in: fixture)
 
         let replacementToken = WindowToken(pid: fixture.pid, windowId: 951_107)
@@ -292,11 +403,11 @@ final class WindowCloseFocusRecoveryTests: XCTestCase {
         XCTAssertNil(fixture.controller.intentLedger.openSameAppCloseProbe())
     }
 
-    func testResetCancelsHeldSameAppCloseProbe() throws {
+    func testResetCancelsHeldSameAppCloseProbe() async throws {
         let fixture = try Self.makeFixture()
         defer { Self.stop(fixture) }
 
-        Self.closeFocusedWindow(in: fixture)
+        await Self.closeFocusedWindow(in: fixture)
         _ = try Self.observeRemoteFocus(in: fixture)
         XCTAssertNotNil(fixture.controller.intentLedger.openSameAppCloseProbe())
 
@@ -318,13 +429,13 @@ final class WindowCloseFocusRecoveryTests: XCTestCase {
         switch order {
         case .focusThenDestroy:
             probeId = try observeRemoteFocus(in: fixture)
-            closeFocusedWindow(in: fixture)
+            await closeFocusedWindow(in: fixture)
         case .destroyThenFocus:
-            closeFocusedWindow(in: fixture)
+            await closeFocusedWindow(in: fixture)
             probeId = try observeRemoteFocus(in: fixture)
         case nil:
             probeId = nil
-            closeFocusedWindow(in: fixture)
+            await closeFocusedWindow(in: fixture)
         }
 
         if let probeId {
@@ -381,9 +492,9 @@ final class WindowCloseFocusRecoveryTests: XCTestCase {
                     source: .focusedWindowChanged
                 )
             )
-            closeFocusedWindow(in: fixture)
+            await closeFocusedWindow(in: fixture)
         case .destroyThenFocus:
-            closeFocusedWindow(in: fixture)
+            await closeFocusedWindow(in: fixture)
             XCTAssertTrue(
                 controller.axEventHandler.handleAppActivation(
                     pid: fixture.pid,
@@ -531,10 +642,11 @@ final class WindowCloseFocusRecoveryTests: XCTestCase {
         return try XCTUnwrap(fixture.controller.intentLedger.openSameAppCloseProbe()?.intent.id)
     }
 
-    private static func closeFocusedWindow(in fixture: Fixture) {
+    private static func closeFocusedWindow(in fixture: Fixture) async {
         fixture.controller.axEventHandler.handleCGSEvent(
             .closed(windowId: UInt32(fixture.closingToken.windowId))
         )
+        await fixture.controller.axEventHandler.lifecycleQueries.task?.value
     }
 
     private static func stop(_ fixture: Fixture) {

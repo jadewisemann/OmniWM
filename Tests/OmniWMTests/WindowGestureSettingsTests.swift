@@ -98,10 +98,10 @@ final class WindowGestureSettingsTests: XCTestCase {
             settings.gestures.scrollEnabled = false
             settings.gestures.workspaceSwipeEnabled = false
             settings.gestures.overviewGestureEnabled = false
-            XCTAssertTrue(settings.gestures.trackpadGesturesEnabled)
+            XCTAssertTrue(settings.effectiveTrackpadGesturesEnabled)
             settings.gestures.windowResizeEnabled = false
 
-            XCTAssertFalse(settings.gestures.trackpadGesturesEnabled)
+            XCTAssertFalse(settings.effectiveTrackpadGesturesEnabled)
             XCTAssertEqual(states, [true, false])
         }
     }

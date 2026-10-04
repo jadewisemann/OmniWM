@@ -89,12 +89,12 @@ extension IPCManualWindowOverride {
 }
 
 extension IPCHiddenReason {
-    init(hiddenState: HiddenState) {
+    init(hiddenState: HiddenState, isInactiveTabMember: Bool) {
         switch hiddenState.reason {
         case .workspaceInactive:
             self = .workspaceInactive
         case .layoutTransient:
-            self = .layoutTransient
+            self = isInactiveTabMember ? .tabInactive : .layoutTransient
         case .scratchpad:
             self = .scratchpad
         }

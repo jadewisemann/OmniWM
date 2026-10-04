@@ -97,9 +97,15 @@ extension WorkspaceSwipePresentation {
               let source = makeWorkspace(current.id, monitor: monitor, active: true)
         else { return nil }
         let wm = controller.workspaceManager
-        let previous = wm.previousWorkspaceInOrder(on: monitorId, from: current.id, wrapAround: true)
-            .flatMap { makeWorkspace($0.id, monitor: monitor, active: false) }
-        let next = wm.nextWorkspaceInOrder(on: monitorId, from: current.id, wrapAround: true)
+        let skipEmpty = controller.workspaceNavigationHandler.skipsEmptyWorkspaces(on: monitorId)
+        let previous = wm.previousWorkspaceInOrder(
+            on: monitorId,
+            from: current.id,
+            wrapAround: true,
+            skipEmpty: skipEmpty
+        )
+        .flatMap { makeWorkspace($0.id, monitor: monitor, active: false) }
+        let next = wm.nextWorkspaceInOrder(on: monitorId, from: current.id, wrapAround: true, skipEmpty: skipEmpty)
             .flatMap { makeWorkspace($0.id, monitor: monitor, active: false) }
         return Preparation(
             monitor: monitor,
@@ -133,7 +139,7 @@ extension WorkspaceSwipePresentation {
     private func makeWorkspace(_ id: WorkspaceDescriptor.ID, monitor: Monitor, active: Bool) -> Workspace? {
         guard let controller, let refreshController else { return nil }
         let entries = controller.workspaceManager.entries(in: id).filter {
-            !controller.workspaceManager.isAppHidden(pid: $0.pid)
+            !controller.workspaceManager.isWindowSuppressedByMacOS($0.token)
         }
         guard entries.allSatisfy({ $0.layoutReason == .standard }) else { return nil }
         let frames: [WindowToken: CGRect] = controller.workspaceManager.withEngineMutationScope {
@@ -184,7 +190,7 @@ extension WorkspaceSwipePresentation {
                 guard item.handle.token == item.token,
                       let entry = controller.workspaceManager.entry(for: item.handle),
                       entry.workspaceId == workspace.id, entry.layoutReason == .standard,
-                      !controller.workspaceManager.isAppHidden(pid: entry.pid)
+                      !controller.workspaceManager.isWindowSuppressedByMacOS(entry.token)
                 else { return false }
             }
         }

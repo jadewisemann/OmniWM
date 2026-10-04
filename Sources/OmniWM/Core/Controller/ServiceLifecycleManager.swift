@@ -26,6 +26,14 @@ final class ServiceLifecycleManager {
     private var permissionCheckerTask: Task<Void, Never>?
 
     private(set) var isSecureInputActive = false
+    var userStopPhase = UserStopPhase.idle
+    var quitRequested = false
+    var stopCompletions: [@MainActor @Sendable () -> Void] = []
+    var stopDeadlineTask: Task<Void, Never>?
+
+    var isStoppingForUser: Bool {
+        userStopPhase != .idle
+    }
 
     init(controller: WMController) {
         self.controller = controller
@@ -35,7 +43,7 @@ final class ServiceLifecycleManager {
     }
 
     func start() {
-        guard let controller else { return }
+        guard let controller, !isStoppingForUser, !quitRequested else { return }
         let initialPermissionGranted = AccessibilityPermissionMonitor.shared.isGranted
         controller.updateAccessibilityPermissionGranted(initialPermissionGranted)
         setupSeparateSpacesObserver()
@@ -67,7 +75,7 @@ final class ServiceLifecycleManager {
     }
 
     private func maybeStartServices() {
-        guard let controller else { return }
+        guard let controller, !isStoppingForUser, !quitRequested else { return }
         controller.updateDisplaySpacesMode(SkyLight.shared.displaysHaveSeparateSpaces)
         if controller.displaySpacesMode == .disabled {
             if controller.hasStartedServices {
@@ -277,8 +285,14 @@ final class ServiceLifecycleManager {
     }
 
     func stop() {
+        guard !isStoppingForUser else { return }
+        stopServices(retainingAXWorkers: false)
+    }
+
+    func stopServices(retainingAXWorkers: Bool) {
         guard let controller else { return }
-        if let request = controller.intentLedger.activeManagedRequest,
+        controller.reconcileEnabledAndHotkeysState()
+        if !retainingAXWorkers, let request = controller.intentLedger.activeManagedRequest,
            case .awaitingSameAppActivation = request.phase
         {
             controller.cancelManagedFocusRequestAndRestoreSource(request)
@@ -287,20 +301,7 @@ final class ServiceLifecycleManager {
         controller.invalidateOverviewDeferredActionsForServiceStop()
         topologyInventory.cancel()
 
-        let hiddenPIDs = controller.workspaceManager.hiddenAppPIDs
-        let trackedPIDs = Set(controller.workspaceManager.allEntries().map(\.pid))
-        for pid in trackedPIDs.subtracting(hiddenPIDs) {
-            controller.workspaceManager.invalidateAppVisibility(for: pid, source: .service)
-        }
-        for pid in hiddenPIDs {
-            let entries = controller.workspaceManager.entries(forPid: pid)
-            controller.axManager.setMacOSAppHidden(
-                false,
-                pid: pid,
-                entries: entries.map { (pid: $0.pid, windowId: $0.windowId) }
-            )
-        }
-        controller.workspaceManager.replaceHiddenAppPIDs([], source: .service)
+        if !retainingAXWorkers { clearStoppedVisibility(controller) }
 
         controller.eventIntake.close()
         controller.factResolver.stop()
@@ -311,8 +312,8 @@ final class ServiceLifecycleManager {
         disconnectAXCallbacks(controller)
         controller.workspaceManager.onGapsChanged = nil
 
-        controller.layoutRefreshController.resetState()
         controller.mouseEventHandler.cleanup()
+        controller.layoutRefreshController.resetState()
         controller.resetMouseWarpPolicy()
         controller.axEventHandler.cleanup()
 
@@ -321,7 +322,11 @@ final class ServiceLifecycleManager {
         controller.surfaceReconciler.cleanup()
         controller.cleanupUIOnStop()
 
-        controller.axManager.cleanup()
+        if retainingAXWorkers {
+            controller.axManager.prepareForStopRestoration()
+        } else {
+            controller.axManager.cleanup()
+        }
 
         SkyLight.shared.stopWindowInfoQueries()
 
@@ -336,6 +341,23 @@ final class ServiceLifecycleManager {
         permissionCheckerTask?.cancel()
         permissionCheckerTask = nil
         controller.reconcileEnabledAndHotkeysState()
+    }
+}
+
+extension ServiceLifecycleManager {
+    private func clearStoppedVisibility(_ controller: WMController) {
+        let hiddenPIDs = controller.workspaceManager.hiddenAppPIDs
+        let trackedPIDs = Set(controller.workspaceManager.allEntries().map(\.pid))
+        for pid in trackedPIDs.subtracting(hiddenPIDs) {
+            controller.workspaceManager.invalidateAppVisibility(for: pid, source: .service)
+        }
+        for pid in hiddenPIDs {
+            let entries = controller.workspaceManager.entries(forPid: pid)
+            controller.axManager.setMacOSAppHidden(
+                false, pid: pid, entries: entries.map { (pid: $0.pid, windowId: $0.windowId) }
+            )
+        }
+        controller.workspaceManager.replaceHiddenAppPIDs([], source: .service)
     }
 
     private func clearPendingManagedFocus(_ controller: WMController) {

@@ -15,7 +15,7 @@ extension AXManager {
 
     func windowsForApp(_ app: NSRunningApplication) async -> [AXWindowRef] {
         let pid = app.processIdentifier
-        guard shouldTrack(app, pid: pid) else { return [] }
+        guard Self.shouldTrack(app, pid: pid) else { return [] }
         var callbackGeneration: UInt64?
         do {
             guard let context = try await AppAXContextRegistry.getOrCreate(app, pid: pid) else {
@@ -47,7 +47,7 @@ extension AXManager {
     }
 
     func ensureContext(for app: NSRunningApplication, pid: pid_t) async -> Bool {
-        guard shouldTrack(app, pid: pid) else { return false }
+        guard Self.shouldTrack(app, pid: pid) else { return false }
         return (try? await AppAXContextRegistry.getOrCreate(app, pid: pid)) != nil
     }
 
@@ -60,7 +60,7 @@ extension AXManager {
         return AccessibilityPermissionMonitor.shared.isGranted
     }
 
-    func shouldTrack(_ app: NSRunningApplication, pid: pid_t) -> Bool {
+    static func shouldTrack(_ app: NSRunningApplication, pid: pid_t) -> Bool {
         guard !app.isTerminated, app.activationPolicy != .prohibited else { return false }
         guard pid > 0, pid != ProcessInfo.processInfo.processIdentifier else { return false }
 

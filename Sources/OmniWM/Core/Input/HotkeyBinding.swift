@@ -389,77 +389,6 @@ enum HotkeyBindingResolutionError: LocalizedError, Equatable {
     }
 }
 
-enum HotkeyBindingRegistry {
-    private static let defaultBindings = DefaultHotkeyBindings.all()
-    private static let bindingsByID = Dictionary(
-        defaultBindings.map { ($0.id, $0) },
-        uniquingKeysWith: { first, _ in first }
-    )
-
-    static func defaults() -> [HotkeyBinding] {
-        defaultBindings
-    }
-
-    static func command(for id: String) -> HotkeyCommand? {
-        bindingsByID[id]?.command
-    }
-
-    static func makeBinding(id: String, binding: KeyBinding) -> HotkeyBinding? {
-        guard let defaultBinding = bindingsByID[id] else { return nil }
-        return HotkeyBinding(id: id, command: defaultBinding.command, binding: binding)
-    }
-
-    static func makeBinding(id: String, trigger: HotkeyTrigger) -> HotkeyBinding? {
-        guard let defaultBinding = bindingsByID[id] else { return nil }
-        return HotkeyBinding(id: id, command: defaultBinding.command, trigger: trigger)
-    }
-
-    static func resolve(_ persisted: [PersistedHotkeyBinding]) throws -> [HotkeyBinding] {
-        var overrides: [String: HotkeyTrigger] = [:]
-        for entry in persisted {
-            guard bindingsByID[entry.id] != nil else {
-                if ActionCatalog.visibility(for: entry.id) == .unassignable {
-                    throw HotkeyBindingResolutionError.unassignableActionID(entry.id)
-                }
-                throw HotkeyBindingResolutionError.unknownActionID(entry.id)
-            }
-            guard overrides[entry.id] == nil else {
-                throw HotkeyBindingResolutionError.duplicateActionID(entry.id)
-            }
-            overrides[entry.id] = canonicalizeTrigger(entry.binding)
-        }
-        return try defaultBindings.map { binding in
-            guard let override = overrides[binding.id] else {
-                throw HotkeyBindingResolutionError.missingActionID(binding.id)
-            }
-            return HotkeyBinding(id: binding.id, command: binding.command, trigger: override)
-        }
-    }
-
-    static func canonicalizeTrigger(_ trigger: HotkeyTrigger) -> HotkeyTrigger {
-        switch trigger {
-        case .unassigned:
-            return .unassigned
-        case let .chord(binding):
-            return binding.isUnassigned ? .unassigned : .chord(binding)
-        }
-    }
-
-    static func retargetingHyperChords(
-        _ bindings: [HotkeyBinding],
-        to composition: HyperKeyModifiers
-    ) -> [HotkeyBinding] {
-        let encoded = bindings.map { ($0, $0.binding.humanReadableString) }
-        KeySymbolMapper.setHyperKeyModifiers(composition)
-        return encoded.map { binding, string in
-            guard case .chord = binding.binding,
-                  let trigger = HotkeyTrigger.fromHumanReadable(string)
-            else { return binding }
-            return HotkeyBinding(id: binding.id, command: binding.command, trigger: trigger)
-        }
-    }
-}
-
 enum HotkeyCategory: String, CaseIterable {
     case workspace = "Workspace"
     case focus = "Focus"
@@ -467,4 +396,34 @@ enum HotkeyCategory: String, CaseIterable {
     case monitor = "Monitor"
     case layout = "Layout"
     case column = "Container and Column"
+
+    var localizedDisplayName: String {
+        Self.localizedNames[self] ?? rawValue
+    }
+
+    private static let localizedNames: [HotkeyCategory: String] = [
+        .workspace: String(localized: LocalizedStringResource(
+            "command.category.workspace", defaultValue: "Workspace", table: "Commands",
+            bundle: .omniWM
+        )),
+        .focus: String(localized: LocalizedStringResource(
+            "command.category.focus", defaultValue: "Focus", table: "Commands", bundle: .omniWM
+        )),
+        .move: String(localized: LocalizedStringResource(
+            "command.category.move", defaultValue: "Move Window", table: "Commands",
+            bundle: .omniWM
+        )),
+        .monitor: String(localized: LocalizedStringResource(
+            "command.category.monitor", defaultValue: "Monitor", table: "Commands",
+            bundle: .omniWM
+        )),
+        .layout: String(localized: LocalizedStringResource(
+            "command.category.layout", defaultValue: "Layout", table: "Commands",
+            bundle: .omniWM
+        )),
+        .column: String(localized: LocalizedStringResource(
+            "command.category.column", defaultValue: "Container and Column", table: "Commands",
+            bundle: .omniWM
+        ))
+    ]
 }

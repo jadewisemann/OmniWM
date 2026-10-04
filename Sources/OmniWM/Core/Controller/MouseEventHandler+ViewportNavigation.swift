@@ -20,7 +20,7 @@ extension MouseEventHandler {
         timestamp: TimeInterval = CACurrentMediaTime()
     ) {
         guard let controller else { return }
-        let insetFrame = controller.insetWorkingFrame(for: monitor)
+        let insetFrame = controller.niriWorkingFrame(for: monitor)
         let driver = controller.workspaceManager.animationDriver
         let viewportSpan = orientation == .horizontal ? insetFrame.width : insetFrame.height
 

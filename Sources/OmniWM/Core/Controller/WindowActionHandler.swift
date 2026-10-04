@@ -86,11 +86,13 @@ final class WindowActionHandler {
     }
 
     func toggleOverview() {
+        guard controller?.settings.overview.enabled == true else { return }
         controller?.layoutRefreshController.workspaceSwipe.cancel(reason: "overview")
         overviewController.toggle()
     }
 
     func openOverview() {
+        guard controller?.settings.overview.enabled == true else { return }
         controller?.layoutRefreshController.workspaceSwipe.cancel(reason: "overview")
         overviewController.input.beginGestureScrollSuppression()
         overviewController.open()
@@ -113,6 +115,7 @@ final class WindowActionHandler {
     }
 
     func beginOverviewGesture() -> Bool {
+        guard controller?.settings.overview.enabled == true else { return false }
         controller?.layoutRefreshController.workspaceSwipe.cancel(reason: "overview")
         return overviewController.beginInteractiveTransition()
     }
@@ -139,6 +142,11 @@ final class WindowActionHandler {
 
     func invalidateOverviewDeferredActionsForServiceStop() {
         overviewControllerStorage?.invalidateDeferredActionsForServiceStop()
+    }
+
+    func releaseOverviewController() {
+        overviewControllerStorage?.invalidateDeferredActionsForServiceStop()
+        overviewControllerStorage = nil
     }
 
     func handleOverviewWindowRemoved(_ entry: WindowState) {
@@ -201,12 +209,28 @@ final class WindowActionHandler {
     }
 
     @discardableResult
-    func navigateToExplicitlySelectedWindow(handle: WindowHandle) -> Bool {
+    func navigateToExplicitlySelectedWindow(
+        handle: WindowHandle,
+        focusOrigin: ManagedFocusOrigin = .keyboardOrProgrammatic
+    ) -> Bool {
         guard let controller else { return false }
         let destination: AppRevealFocusDestination = controller.workspaceManager
             .scratchpadIndex(for: handle.id)
             .map { .scratchpadWindow(index: $0, monitorId: nil) } ?? .window
-        return appReveal.requestIfNeeded(handle: handle, destination: destination)
+        return appReveal.requestIfNeeded(handle: handle, destination: destination, focusOrigin: focusOrigin)
+    }
+
+    @discardableResult
+    func revealScratchpadWindowFromBar(
+        handle: WindowHandle,
+        index: ScratchpadIndex,
+        monitorId: Monitor.ID
+    ) -> Bool {
+        appReveal.requestIfNeeded(
+            handle: handle,
+            destination: .scratchpadWindow(index: index, monitorId: monitorId),
+            focusOrigin: .pointerSelection
+        )
     }
 
     @discardableResult
@@ -228,9 +252,15 @@ final class WindowActionHandler {
     }
 
     @discardableResult
-    func focusWorkspaceFromBar(id workspaceId: WorkspaceDescriptor.ID) -> Bool {
+    func focusWorkspaceFromBar(
+        id workspaceId: WorkspaceDescriptor.ID,
+        focusOrigin: ManagedFocusOrigin = .keyboardOrProgrammatic
+    ) -> Bool {
         guard let controller else { return false }
-        return controller.workspaceNavigationHandler.focusWorkspaceFromBar(id: workspaceId)
+        return controller.workspaceNavigationHandler.focusWorkspaceFromBar(
+            id: workspaceId,
+            focusOrigin: focusOrigin
+        )
     }
 
     @discardableResult
@@ -241,8 +271,11 @@ final class WindowActionHandler {
     }
 
     @discardableResult
-    func focusWindowFromBar(handle: WindowHandle) -> Bool {
-        let navigated = navigateToExplicitlySelectedWindow(handle: handle)
+    func focusWindowFromBar(
+        handle: WindowHandle,
+        focusOrigin: ManagedFocusOrigin = .keyboardOrProgrammatic
+    ) -> Bool {
+        let navigated = navigateToExplicitlySelectedWindow(handle: handle, focusOrigin: focusOrigin)
         if navigated,
            let controller,
            let originalToken = AppRevealActions.suspendedNativeFullscreenOriginalToken(

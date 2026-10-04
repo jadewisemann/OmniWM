@@ -17,7 +17,7 @@ extension MouseEventHandler {
         if let axis = lockedContext.workspaceAxis {
             config.workspaceSwipeAxis = axis
         }
-        config.overviewAction = lockedContext.overviewAction
+        config.overviewAction = controller.settings.overview.enabled ? lockedContext.overviewAction : nil
         guard let mode = TrackpadGestureIntent.resolveMode(
             config,
             fingerCount: lockedContext.fingerCount,
@@ -142,7 +142,9 @@ extension MouseEventHandler {
         metrics: GestureFrameMetrics,
         timestamp: TimeInterval
     ) {
-        guard let controller, controller.settings.gestures.overviewGestureEnabled else {
+        guard let controller, controller.settings.overview.enabled,
+              controller.settings.gestures.overviewGestureEnabled
+        else {
             abortActiveGestureIfNeeded()
             return
         }

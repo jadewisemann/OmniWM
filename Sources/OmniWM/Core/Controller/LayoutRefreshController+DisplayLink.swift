@@ -114,20 +114,18 @@ extension LayoutRefreshController {
             .updateValue(displayLink.timestamp, forKey: displayId)
         let intervalMs = previousTickTimestamp.map { (displayLink.timestamp - $0) * 1000 } ?? 0
         let phaseTiming = applyDisplayAnimationTick(displayLink, displayId: displayId, traceActive: traceActive)
+        let animationApplyEndTime = traceActive ? CACurrentMediaTime() : 0
         stopDisplayLinkIfIdle(for: displayId)
+        let idleStopEndTime = traceActive ? CACurrentMediaTime() : 0
         auditParkVisibility(displayId: displayId)
 
         let completionTime = CACurrentMediaTime()
-        let expectedMs = displayLink.duration * 1000
-        let totalMs = (completionTime - entryTime) * 1000
-        let entrySlackMs = (displayLink.targetTimestamp - entryTime) * 1000
-        let completionSlackMs = (displayLink.targetTimestamp - completionTime) * 1000
         let timing = DisplayTickTiming(
             intervalMs: intervalMs,
-            expectedMs: expectedMs,
-            workMs: totalMs,
-            entrySlackMs: entrySlackMs,
-            completionSlackMs: completionSlackMs
+            expectedMs: displayLink.duration * 1000,
+            workMs: (completionTime - entryTime) * 1000,
+            entrySlackMs: (displayLink.targetTimestamp - entryTime) * 1000,
+            completionSlackMs: (displayLink.targetTimestamp - completionTime) * 1000
         )
         let classification = displayTickMetrics.record(timing, hasPreviousTick: previousTickTimestamp != nil)
 
@@ -142,6 +140,10 @@ extension LayoutRefreshController {
                 dwindleMs: (phaseTiming.dwindleEndTime - phaseTiming.scrollEndTime) * 1000,
                 closingMs: (phaseTiming.closingEndTime - phaseTiming.dwindleEndTime) * 1000,
                 reconcileMs: (completionTime - phaseTiming.closingEndTime) * 1000,
+                surfaceMs: (phaseTiming.surfaceEndTime - phaseTiming.closingEndTime) * 1000,
+                transactionScopeMs: (animationApplyEndTime - phaseTiming.surfaceEndTime) * 1000,
+                idleStopMs: (idleStopEndTime - animationApplyEndTime) * 1000,
+                parkAuditMs: (completionTime - idleStopEndTime) * 1000,
                 classification: classification
             )
         )
@@ -378,6 +380,7 @@ extension LayoutRefreshController {
         let scrollEndTime: CFTimeInterval
         let dwindleEndTime: CFTimeInterval
         let closingEndTime: CFTimeInterval
+        let surfaceEndTime: CFTimeInterval
     }
 
     private func applyDisplayAnimationTick(
@@ -388,6 +391,7 @@ extension LayoutRefreshController {
         var scrollEndTime: CFTimeInterval = 0
         var dwindleEndTime: CFTimeInterval = 0
         var closingEndTime: CFTimeInterval = 0
+        var surfaceEndTime: CFTimeInterval = 0
 
         SkyLight.shared.withTransactionScope {
             workspaceSwipe.tick(displayId: displayId, timestamp: displayLink.targetTimestamp)
@@ -398,11 +402,13 @@ extension LayoutRefreshController {
             tickClosingAnimations(targetTime: displayLink.targetTimestamp, displayId: displayId)
             closingEndTime = traceActive ? CACurrentMediaTime() : 0
             controller?.surfaceReconciler.reconcileAnimationTick()
+            surfaceEndTime = traceActive ? CACurrentMediaTime() : 0
         }
         return DisplayAnimationPhaseTiming(
             scrollEndTime: scrollEndTime,
             dwindleEndTime: dwindleEndTime,
-            closingEndTime: closingEndTime
+            closingEndTime: closingEndTime,
+            surfaceEndTime: surfaceEndTime
         )
     }
 

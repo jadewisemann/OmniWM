@@ -127,9 +127,22 @@ extension LayoutRefreshController {
         if didComplete {
             recordCompletedLayoutCycle()
             completeRefreshActions(completedRefresh, didExecuteEffectPlan: didExecuteEffectPlan)
+            collectUnusedWorkspacesIfIdle()
         }
 
         startNextRefreshIfNeeded()
+    }
+
+    func collectUnusedWorkspacesIfIdle() {
+        guard let controller,
+              layoutState.activeRefresh == nil,
+              !controller.isOverviewOpen(),
+              workspaceSwipe.preparation == nil,
+              !workspaceSwipe.hasPresentation
+        else { return }
+        controller.workspaceManager.garbageCollectUnusedWorkspaces(
+            focusedWorkspaceId: controller.activeWorkspace()?.id
+        )
     }
 
     func completeRefreshActions(_ completedRefresh: ScheduledRefresh, didExecuteEffectPlan: Bool) {

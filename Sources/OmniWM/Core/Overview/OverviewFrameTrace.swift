@@ -15,6 +15,30 @@ enum OverviewFrameTrace {
         case previewRequested
         case previewStarted
         case previewArrived
+        case previewEvicted
+        case previewCacheCleared
+    }
+
+    enum PreviewConsumer: String, Sendable {
+        case overview, workspaceSwipe, workspaceBarHover
+    }
+
+    enum PreviewReason: String, Sendable {
+        case cacheMiss, cachedRefresh, unrepresented, tokenChanged, removed, budget
+        case memoryPressure, shutdown, explicitRelease, retained
+    }
+
+    struct Preview: Sendable {
+        let consumer: PreviewConsumer
+        let cacheId: UInt64
+        let pid: pid_t
+        let windowId: Int
+        let reason: PreviewReason?
+        let firstFrameOnly: Bool
+        let pixelWidth: Int
+        let pixelHeight: Int
+        let bytes: Int
+        let cachedCount: Int
     }
 
     struct Record: Sendable {
@@ -30,6 +54,7 @@ enum OverviewFrameTrace {
         let pendingInvalidations: Int
         let endpointScheduled: Bool
         let sessionCompleted: Bool
+        var preview: Preview?
     }
 
     final class Recorder: RuntimeTraceRecording, @unchecked Sendable {
@@ -52,10 +77,16 @@ enum OverviewFrameTrace {
                     record.targetLeadMs
                 )
                 let progress = String(format: "%.5f", record.progress)
+                let preview = record.preview.map {
+                    " consumer=\($0.consumer.rawValue) cache=\($0.cacheId)"
+                        + " pid=\($0.pid) wid=\($0.windowId) reason=\($0.reason?.rawValue ?? "none")"
+                        + " mode=\($0.firstFrameOnly ? "firstFrame" : "continuous")"
+                        + " pixels=\($0.pixelWidth)x\($0.pixelHeight) bytes=\($0.bytes) cached=\($0.cachedCount)"
+                } ?? ""
                 return "event=\(record.event.rawValue) t=\(mediaTime) disp=\(record.displayId)"
                     + " gen=\(record.generation) seq=\(record.sequence) progress=\(progress) \(timing)"
                     + " pending=\(record.pendingInvalidations) endpoint=\(record.endpointScheduled)"
-                    + " complete=\(record.sessionCompleted)"
+                    + " complete=\(record.sessionCompleted)" + preview
             }
         }
 

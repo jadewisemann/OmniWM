@@ -5,12 +5,6 @@ import Foundation
 
 @MainActor
 extension AXEventHandler {
-    func handleWindowMiniaturized(pid: pid_t, windowId: Int) {
-        controller?.workspaceManager.clearExternalFocusIdentity(
-            matching: WindowToken(pid: pid, windowId: windowId)
-        )
-    }
-
     func handleAppDeactivated(pid: pid_t) {
         guard let controller else { return }
         let workspaceManager = controller.workspaceManager

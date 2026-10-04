@@ -38,7 +38,7 @@ extension WorkspaceManager {
     ) -> Bool {
         guard entry.workspaceId == workspaceId,
               entry.mode == mode,
-              !isAppHidden(pid: entry.pid)
+              !isWindowSuppressedByMacOS(entry)
         else {
             return false
         }

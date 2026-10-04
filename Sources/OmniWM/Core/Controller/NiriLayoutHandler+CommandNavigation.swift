@@ -146,7 +146,7 @@ extension NiriLayoutHandler {
         }
 
         let gap = controller.innerGap(for: monitor)
-        let workingFrame = controller.insetWorkingFrame(for: monitor)
+        let workingFrame = controller.niriWorkingFrame(for: monitor)
         let motion = controller.motionPolicy.snapshot()
         let orientation = controller.settings.monitors.effectiveOrientation(for: monitor)
         let context = NiriInteractionContext(

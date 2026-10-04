@@ -8,6 +8,10 @@ final class OverviewSettings {
     private nonisolated static let defaults = SettingsExport.Overview.defaults()
     @ObservationIgnored var onChange: (() -> Void)?
 
+    var enabled = OverviewSettings.defaults.enabled ?? true {
+        didSet { onChange?() }
+    }
+
     var zoom = OverviewSettings.defaults.zoom {
         didSet { onChange?() }
     }
@@ -46,6 +50,7 @@ final class OverviewSettings {
 
     func export() -> SettingsExport.Overview {
         SettingsExport.Overview(
+            enabled: enabled,
             zoom: zoom,
             backdrop: backdropColor,
             windowBorders: SettingsExport.OverviewWindowBorders(
@@ -61,6 +66,7 @@ final class OverviewSettings {
     }
 
     func apply(_ values: SettingsExport.Overview, baseline: SettingsExport.Overview) {
+        enabled = values.enabled ?? baseline.enabled ?? true
         zoom = Self.validatedZoom(values.zoom)
         invertScrollDirection = values.invertScrollDirection ?? false
         mouseScrollSpeed = Self.validatedMouseScrollSpeed(values.mouseScrollSpeed ?? 1)

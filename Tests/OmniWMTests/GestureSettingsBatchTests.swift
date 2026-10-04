@@ -19,73 +19,88 @@ final class GestureSettingsBatchTests: XCTestCase {
                 candidate.windowGestureSensitivity = 2.5
                 var published: [SettingsExport.Gestures] = []
                 var availability: [Bool] = []
-                settings.gestures.onChange = { published.append(settings.gestures.export()) }
+                let originalOnChange = settings.gestures.onChange
+                settings.gestures.onChange = {
+                    published.append(settings.gestures.export())
+                    originalOnChange?()
+                }
                 settings.onTrackpadGestureAvailabilityChanged = { availability.append($0) }
 
                 XCTAssertNil(settings.updateGestureSettings(candidate, monitors: []))
 
                 XCTAssertEqual(published, [candidate])
                 XCTAssertTrue(availability.isEmpty)
-                XCTAssertTrue(settings.gestures.trackpadGesturesEnabled)
+                XCTAssertTrue(settings.effectiveTrackpadGesturesEnabled)
                 settings.gestures.onChange = nil
             }
         }
     }
 
     func testAvailabilityCallbacksSeeFinalStateOnlyWhenAggregateChanges() {
-        let gestures = GestureSettings()
-        var candidate = gestures.export()
-        var availability: [Bool] = []
-        var availabilitySnapshots: [SettingsExport.Gestures] = []
-        var changes = 0
-        gestures.onChange = { changes += 1 }
-        gestures.onAvailabilityChanged = {
-            availability.append($0)
-            availabilitySnapshots.append(gestures.export())
+        withSettings { settings in
+            let gestures = settings.gestures
+            var candidate = gestures.export()
+            var availability: [Bool] = []
+            var availabilitySnapshots: [SettingsExport.Gestures] = []
+            var changes = 0
+            let originalOnChange = gestures.onChange
+            gestures.onChange = {
+                changes += 1
+                originalOnChange?()
+            }
+            settings.onTrackpadGestureAvailabilityChanged = {
+                availability.append($0)
+                availabilitySnapshots.append(gestures.export())
+            }
+
+            candidate.scrollEnabled = false
+            candidate.windowGestureSensitivity = 2
+            gestures.apply(candidate)
+            let disabled = candidate
+
+            candidate.windowResizeEnabled = true
+            candidate.windowResizeFingerCount = .four
+            candidate.windowGestureSensitivity = 3
+            gestures.apply(candidate)
+            let enabled = candidate
+
+            candidate.windowResizeEnabled = false
+            candidate.windowGestureSensitivity = 4
+            gestures.apply(candidate)
+
+            XCTAssertEqual(availability, [false, true, false])
+            XCTAssertEqual(availabilitySnapshots, [disabled, enabled, candidate])
+            XCTAssertEqual(changes, 3)
         }
-
-        candidate.scrollEnabled = false
-        candidate.windowGestureSensitivity = 2
-        gestures.apply(candidate)
-        let disabled = candidate
-
-        candidate.windowResizeEnabled = true
-        candidate.windowResizeFingerCount = .four
-        candidate.windowGestureSensitivity = 3
-        gestures.apply(candidate)
-        let enabled = candidate
-
-        candidate.windowResizeEnabled = false
-        candidate.windowGestureSensitivity = 4
-        gestures.apply(candidate)
-
-        XCTAssertEqual(availability, [false, true, false])
-        XCTAssertEqual(availabilitySnapshots, [disabled, enabled, candidate])
-        XCTAssertEqual(changes, 3)
-        gestures.onAvailabilityChanged = nil
     }
 
     func testNoOpAndEquivalentNormalizedApplicationsPublishNothing() {
-        let gestures = GestureSettings()
-        var changes = 0
-        var availability: [Bool] = []
-        gestures.onChange = { changes += 1 }
-        gestures.onAvailabilityChanged = { availability.append($0) }
+        withSettings { settings in
+            let gestures = settings.gestures
+            var changes = 0
+            var availability: [Bool] = []
+            let originalOnChange = gestures.onChange
+            gestures.onChange = {
+                changes += 1
+                originalOnChange?()
+            }
+            settings.onTrackpadGestureAvailabilityChanged = { availability.append($0) }
 
-        gestures.apply(gestures.export())
-        var equivalent = gestures.export()
-        equivalent.overviewGestureEnabled = nil
-        equivalent.overviewGestureFingerCount = nil
-        equivalent.windowMoveEnabled = nil
-        equivalent.windowMoveFingerCount = nil
-        equivalent.windowResizeEnabled = nil
-        equivalent.windowResizeFingerCount = nil
-        equivalent.windowGestureSensitivity = .infinity
-        equivalent.scrollSensitivity = .nan
-        gestures.apply(equivalent)
+            gestures.apply(gestures.export())
+            var equivalent = gestures.export()
+            equivalent.overviewGestureEnabled = nil
+            equivalent.overviewGestureFingerCount = nil
+            equivalent.windowMoveEnabled = nil
+            equivalent.windowMoveFingerCount = nil
+            equivalent.windowResizeEnabled = nil
+            equivalent.windowResizeFingerCount = nil
+            equivalent.windowGestureSensitivity = .infinity
+            equivalent.scrollSensitivity = .nan
+            gestures.apply(equivalent)
 
-        XCTAssertEqual(changes, 0)
-        XCTAssertTrue(availability.isEmpty)
+            XCTAssertEqual(changes, 0)
+            XCTAssertTrue(availability.isEmpty)
+        }
     }
 
     func testRejectedAssignmentPublishesNothing() {
@@ -96,7 +111,11 @@ final class GestureSettingsBatchTests: XCTestCase {
             candidate.windowMoveFingerCount = candidate.fingerCount
             var changes = 0
             var availability: [Bool] = []
-            settings.gestures.onChange = { changes += 1 }
+            let originalOnChange = settings.gestures.onChange
+            settings.gestures.onChange = {
+                changes += 1
+                originalOnChange?()
+            }
             settings.onTrackpadGestureAvailabilityChanged = { availability.append($0) }
 
             XCTAssertNotNil(settings.updateGestureSettings(candidate, monitors: []))
@@ -108,20 +127,26 @@ final class GestureSettingsBatchTests: XCTestCase {
     }
 
     func testDirectEditsStillPublishImmediatelyAfterAnApplication() {
-        let gestures = GestureSettings()
-        gestures.apply(gestures.export())
-        var changes = 0
-        var availability: [Bool] = []
-        gestures.onChange = { changes += 1 }
-        gestures.onAvailabilityChanged = { availability.append($0) }
+        withSettings { settings in
+            let gestures = settings.gestures
+            gestures.apply(gestures.export())
+            var changes = 0
+            var availability: [Bool] = []
+            let originalOnChange = gestures.onChange
+            gestures.onChange = {
+                changes += 1
+                originalOnChange?()
+            }
+            settings.onTrackpadGestureAvailabilityChanged = { availability.append($0) }
 
-        gestures.scrollEnabled = false
-        gestures.windowResizeFingerCount = .four
-        gestures.windowResizeEnabled = true
-        gestures.windowResizeEnabled = true
+            gestures.scrollEnabled = false
+            gestures.windowResizeFingerCount = .four
+            gestures.windowResizeEnabled = true
+            gestures.windowResizeEnabled = true
 
-        XCTAssertEqual(changes, 3)
-        XCTAssertEqual(availability, [false, true])
+            XCTAssertEqual(changes, 3)
+            XCTAssertEqual(availability, [false, true])
+        }
     }
 
     func testWholeExportStillPublishesOneAggregateAvailabilityChange() {
@@ -142,6 +167,42 @@ final class GestureSettingsBatchTests: XCTestCase {
             export.gestures.windowResizeEnabled = true
             settings.applyExport(export)
             XCTAssertEqual(availability, [false, true])
+        }
+    }
+
+    func testOverviewSwitchChangesEffectiveAvailabilityWhileOtherGesturesRemainUsable() {
+        withSettings { settings in
+            settings.gestures.scrollEnabled = false
+            settings.gestures.overviewGestureEnabled = true
+            var availability: [Bool] = []
+            settings.onTrackpadGestureAvailabilityChanged = { availability.append($0) }
+
+            settings.overview.enabled = false
+            XCTAssertFalse(settings.effectiveTrackpadGesturesEnabled)
+            settings.gestures.windowMoveEnabled = true
+            XCTAssertTrue(settings.effectiveTrackpadGesturesEnabled)
+            settings.gestures.windowMoveEnabled = false
+            XCTAssertFalse(settings.effectiveTrackpadGesturesEnabled)
+            settings.overview.enabled = true
+
+            XCTAssertTrue(settings.effectiveTrackpadGesturesEnabled)
+            XCTAssertEqual(availability, [false, true, false, true])
+        }
+    }
+
+    func testWholeExportBatchesOverviewAndGestureAvailability() {
+        withSettings { settings in
+            var export = settings.toExport()
+            export.gestures.scrollEnabled = false
+            export.gestures.overviewGestureEnabled = true
+            export.overview.enabled = false
+            var availability: [Bool] = []
+            settings.onTrackpadGestureAvailabilityChanged = { availability.append($0) }
+
+            settings.applyExport(export)
+
+            XCTAssertFalse(settings.effectiveTrackpadGesturesEnabled)
+            XCTAssertEqual(availability, [false])
         }
     }
 

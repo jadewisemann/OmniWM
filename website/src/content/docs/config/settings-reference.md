@@ -10,7 +10,7 @@ This reference follows current `main`; features newer than the latest release ar
 Complete reference for `settings.toml`, in the file's canonical order. The authoritative schema is [`CanonicalTOMLConfig.swift`](https://github.com/OmniNull/OmniWM/blob/main/Sources/OmniWM/Core/Config/CanonicalTOMLConfig.swift); defaults come from [`SettingsExport.swift`](https://github.com/OmniNull/OmniWM/blob/main/Sources/OmniWM/Core/Config/SettingsExport.swift) and [`BuiltInSettingsDefaults.swift`](https://github.com/OmniNull/OmniWM/blob/main/Sources/OmniWM/Core/Config/BuiltInSettingsDefaults.swift).
 
 :::caution
-The current schema is strict — a missing required key in a version 4 file invalidates the whole file, `hotkeys` must list every assignable action exactly once, and an enumerated string key must use one of its listed values (an unknown value rejects the whole file, exactly like a missing key). Conflicting trackpad gesture finger counts under [`gestures`](#gestures) reject the whole file too. Edit values in place; see [Configuration](/config/configuration/).
+The current schema is strict — a missing required key in a version 5 file invalidates the whole file, `hotkeys` must list every required action exactly once (workspace `10+` entries are optional), and an enumerated string key must use one of its listed values (an unknown value rejects the whole file, exactly like a missing key). Conflicting trackpad gesture finger counts under [`gestures`](#gestures) reject the whole file too. Edit values in place; see [Configuration](/config/configuration/).
 :::
 
 **Conventions**
@@ -24,19 +24,19 @@ The current schema is strict — a missing required key in a version 4 file inva
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `schemaVersion` | integer | `4` | Version of the complete `settings.toml` schema. This top-level key appears before the first table. |
+| `schemaVersion` | integer | `5` (fork builds) | Version of the complete `settings.toml` schema. This top-level key appears before the first table. v0.7.4 writes `4`. |
 
 The canonical file declares:
 
 ```toml
-schemaVersion = 4
+schemaVersion = 5
 ```
 
-An absent version identifies a legacy version 0 file, while OmniWM v0.6.4 emitted version 1. OmniWM upgrades version 0, 1, 2, and 3 files sequentially in memory before strict version 4 validation, retaining the compatibility guarantee for settings emitted by v0.6.2 through v0.6.4. The version 2 to version 3 step moves the old flat routing rows into one saved arrangement; the version 3 to version 4 step adds the next-monitor window shortcut and updates the previous focus shortcut default. A successful upgrade creates an exact write-once `settings.toml.pre-v4` or `settings.toml.pre-v4.1` backup, then atomically rewrites canonical TOML once; this can reorder keys and removes comments, while preserving unrecognized keys when their owner can be matched safely. Valid release migrations never use the `.corrupt` recovery slots. Older schema-less files are attempted but remain untouched with defaults active if they cannot validate, and files declaring a newer unsupported version remain untouched with configuration writes blocked. See [Automatic version upgrades](/config/configuration/#automatic-version-upgrades) for the migration rules and recovery behavior.
+An absent version identifies a legacy version 0 file, while OmniWM v0.6.4 emitted version 1 and v0.7.4 emitted version 4. OmniWM upgrades version 0, 1, 2, 3, and 4 files sequentially in memory before strict version 5 validation, retaining the compatibility guarantee for settings emitted by v0.6.2 through v0.6.4. The version 2 to version 3 step moves the old flat routing rows into one saved arrangement; version 3 to version 4 adds the unassigned set/remove window-mark hotkey actions; and version 4 to version 5 adds the next-monitor window shortcut and updates the previous focus shortcut default (fork builds). A successful upgrade creates an exact write-once `settings.toml.pre-v5` or `settings.toml.pre-v5.1` backup, then atomically rewrites canonical TOML once; this can reorder keys and removes comments, while preserving unrecognized keys when their owner can be matched safely. Valid release migrations never use the `.corrupt` recovery slots. Older schema-less files are attempted but remain untouched with defaults active if they cannot validate, and files declaring a newer unsupported version remain untouched with configuration writes blocked. See [Automatic version upgrades](/config/configuration/#automatic-version-upgrades) for the migration rules and recovery behavior.
 
 ## general
 
-Global switches: hotkeys, Hyper key, default layout, sleep, updates, IPC, animations.
+Global switches: hotkeys, Hyper key, default layout, sleep, updates, IPC, animations, interface language.
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -48,6 +48,7 @@ Global switches: hotkeys, Hyper key, default layout, sleep, updates, IPC, animat
 | `updateChecksEnabled` | boolean | `true` | Automatic update checks. |
 | `ipcEnabled` | boolean | `false` | Enables the IPC server used by `omniwmctl`. |
 | `animationsEnabled` | boolean | `true` | Animates window layout changes and other OmniWM-authored motion. macOS Reduce Motion turns them off regardless of this key. |
+| `language` | string | unset | Interface language as a packaged localization code, such as `"ja"` or `"sr-Latn"`. Leave it unset to follow macOS. Takes effect the next time OmniWM starts. |
 
 ## focus
 
@@ -160,6 +161,10 @@ Options for the scrolling (Niri) layout.
 | `singleWindowFit` | string | `"fill"` | Size of a lone window: `fill` (the "Full Screen" fit, which uses the fullscreen layout frame and honors `fullscreenUsesOuterGaps`), `container_primary_span`, or `WIDTHxHEIGHT`. |
 | `containerPrimarySpanPresets` *(optional)* | float array | `[1/3, 1/2, 2/3]` | Span fractions the span-cycling actions step through. |
 | `defaultContainerPrimarySpan` *(optional)* | float | `0.5` | Primary-axis span fraction for new containers. |
+| `resizeStepPercent` *(optional)* | integer | `5` | Increment for Niri grow/shrink actions in percentage points, clamped to 1–100. Applies to container primary, window primary, and window secondary spans. Explicit CLI sizes are unaffected. |
+| `edgeGaps` *(optional)* | boolean | `true` | Keeps the inner gap between columns and the screen edges, in addition to the outer gaps. `false` uses the inner gap only between columns and between stacked windows. A lone window is unaffected. |
+
+The resize increment defaults to 5% instead of the previous fixed 10%.
 
 ## dwindle
 
@@ -207,6 +212,7 @@ Zoom and colors for the Overview.
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
+| `enabled` *(optional)* | boolean | `true` | Enables Overview. When off, its shortcuts, mouse button, trackpad gesture, and direct commands cannot open it; saved input assignments remain available when re-enabled. |
 | `zoom` | float | `1.0` | Overview zoom factor. |
 | `backdrop` | color table | `0.05, 0.05, 0.08, 1.0` | Backdrop behind the zoomed-out workspaces. |
 | `windowBorders.normal` | color table | `0.3, 0.3, 0.35, 0.5` | Border for windows at rest. |
@@ -219,23 +225,24 @@ The per-monitor workspace bar. Per-monitor exceptions live in [`monitorBarOverri
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `enabled` | boolean | `true` | Shows the workspace bar. |
+| `enabled` | boolean | `true` | Shows the workspace bar. When off, all monitors' bars are off, including monitors with `enabled = true` overrides; those preferences return when the global bar is re-enabled. |
+| `hoverPreviewsEnabled` *(optional)* | boolean | `true` | Shows window thumbnail previews when hovering over bar icons. Turning it off releases the preview capture and cache while leaving the bar active. |
 | `showLabels` | boolean | `true` | Shows workspace names next to their numbers. |
 | `showFloatingWindows` | boolean | `false` | Includes floating windows' icons in workspace pills. |
 | `windowLevel` | string | `"popup"` | Bar window level: `normal`, `floating`, `status`, `popup`, `screensaver`. |
-| `position` | string | `"overlappingMenuBar"` | `overlappingMenuBar` or `belowMenuBar`. |
-| `notchMode` | string | `"moveBelowMenuBar"` | Notch handling: `off`, `moveBelowMenuBar`, `splitActiveLeft`, `splitActiveRight`, or `fillLeftOfNotch`. The last fills the menu-bar area left of the notch and covers app menus; without a notch it uses the left half of the menu bar. In this mode `position`, `xOffset`, `yOffset`, `height`, and `reserveLayoutSpace` are ignored: the bar uses the menu-bar height and reserves no layout space. |
+| `position` | string | `"overlappingMenuBar"` | `overlappingMenuBar`, `belowMenuBar`, `bottom`, `left`, or `right`. Bottom and side placements follow the usable display edge, avoiding a visible Dock. |
+| `notchMode` | string | `"moveBelowMenuBar"` | Notch handling: `off`, `moveBelowMenuBar`, `splitActiveLeft`, `splitActiveRight`, or `fillLeftOfNotch`. The last fills the menu-bar area left of the notch and covers app menus; without a notch it uses the left half of the menu bar. At top positions, this mode overrides `position`, `xOffset`, `yOffset`, `height`, and `reserveLayoutSpace`: the bar uses the menu-bar height and reserves no layout space. Bottom/left/right ignore notch modes without changing the saved preference. |
 | `notchActiveZoneWidth` | float | `180.0` | Width in points of the active zone around the notch. |
 | `systemStatsButton` | boolean | `false` | Adds a system stats button to the bar. |
 | `deduplicateAppIcons` | boolean | `false` | Collapses repeated icons of the same app within a pill. |
-| `hideEmptyWorkspaces` | boolean | `false` | Hides pills for workspaces with no windows. |
+| `hideEmptyWorkspaces` | boolean | `false` | Hides inactive empty workspaces in the bar and Overview; next/previous navigation skips them. |
 | `excludedBundleIDs` | string array | `[]` | Bundle IDs whose windows never contribute icons to the bar. |
 | `iconOverrides` | table | `{}` | Bundle ID → custom icon source (see below). |
-| `reserveLayoutSpace` | boolean | `false` | Reserves tiled layout space using the configured bar height. |
+| `reserveLayoutSpace` | boolean | `false` | Reserves the configured bar thickness at its selected edge for tiled and layout-fullscreen windows. Offsets do not change the reservation. |
 | `revealModifier` | string | `"off"` | Reveal the bar by holding a modifier. Any value other than `off` makes the bar overlay-only: it reserves no layout space at all while the modifier is configured, not just while it is held. Values: `off`, `option`, `control`, `command`, `shift`, `controlOption`, `optionCommand`, `optionShift`, `controlCommand`, `controlShift`, `commandShift`, `controlOptionCommand`, `controlOptionShift`, `optionCommandShift`, `controlCommandShift`, `controlOptionCommandShift`. |
 | `revealHoldMilliseconds` | float | `200.0` | How long the modifier must be held before the bar reveals. |
-| `hideInNativeFullscreen` | boolean | `false` | Hides the bar while a native-fullscreen space is active. `fillLeftOfNotch` always hides there, regardless of this setting. |
-| `height` | float | `24.0` | Bar height in points. |
+| `hideInNativeFullscreen` | boolean | `false` | Hides the bar while a native-fullscreen space is active. Effective `fillLeftOfNotch` at a top position always hides there, regardless of this setting. |
+| `height` | float | `24.0` | Bar thickness in points: height for horizontal bars, width for left/right bars. Side bars scroll when content exceeds the usable display height. |
 | `backgroundOpacity` | float | `0.1` | Bar background opacity (`0.0`–`1.0`). |
 | `inactiveIconOpacity` *(optional)* | float | unset | Opacity of unfocused app icons; finite values clamp to `0.0`–`1.0`. Omit to use the built-in appearance; Reset to System Default clears the override. |
 | `transparentBackground` *(optional)* | boolean | `false` | Hides the bar material, tint, and border while keeping its contents interactive. Takes precedence over `solidBlackBackground`. |
@@ -302,7 +309,7 @@ Menu-bar icon concealment (concealment requires macOS 27+).
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `enabled` | boolean | `true` | Enables the Hidden Bar feature. |
+| `enabled` | boolean | `true` | Enables the Hidden Bar feature while the workspace bar is on. |
 | `hiddenBundleIDs` | string array | `[]` | Bundle IDs of menu-bar apps whose icons are concealed. |
 | `rehideIntervalSeconds` | float | `5.0` | Seconds before revealed icons re-hide automatically. |
 
@@ -313,9 +320,10 @@ Clipboard history limits. History content itself is stored in the state director
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
 | `historyEnabled` | boolean | `false` | Enables clipboard history capture. |
-| `maxItems` | integer | `200` | Maximum number of history entries. |
+| `maxItems` | integer | `200` | Maximum number of unpinned history entries. |
 | `maxItemBytes` | integer | `8388608` | Maximum size of a single entry (8 MiB). |
-| `maxTotalBytes` | integer | `67108864` | Maximum total history size (64 MiB). |
+| `maxTotalBytes` | integer | `67108864` | Maximum total history size, including pins (64 MiB). |
+| `ignoredTypes` | string array | `[]` | Exact pasteboard type identifiers that exclude a copy from history. |
 
 ## quakeTerminal
 
@@ -380,10 +388,10 @@ id = "toggleScratchpad.1"
 ```
 
 - `binding` is a human-readable chord: `+`-joined modifiers (`Control`, `Option`, `Shift`, `Command`, or the `Hyper` shorthand for the full [`hyperKeyModifiers`](#general) set) followed by a key name — or `"Unassigned"`. A `Left `/`Right ` prefix pins a modifier to one side (e.g. `"Left Option+H"`).
-- The array is validated strictly: every assignable action must appear **exactly once**. An unknown, unassignable, duplicate, or missing action id rejects the whole file, so rebind by editing `binding` values in place — never add or remove entries.
+- The array is validated strictly: every required action must appear **exactly once**. Workspace `10+` action IDs are optional and appear while those workspaces exist. An unknown, unassignable, duplicate, or missing required action id rejects the whole file, so rebind by editing `binding` values in place.
 - The numeric suffix is zero-based for `switchWorkspace.N`, `moveToWorkspace.N`, `focusColumn.N`, and `moveColumnToWorkspace.N` — `switchWorkspace.0` is *Switch to Workspace 1* (`Option + 1` by default) — and one-based for `switchWorkspaceSlot.N`, `moveToWorkspaceSlot.N`, `focusWindowInColumn.N`, `moveColumnToIndex.N`, `toggleScratchpad.N`, and `assignFocusedWindowToScratchpad.N`.
 
-The default bindings are listed in the [keyboard shortcuts guide](/guides/keyboard-shortcuts/); the full action list is visible in **Settings > Hotkeys** and via `omniwmctl query commands`.
+The default bindings are listed in the [keyboard shortcuts guide](/guides/keyboard-shortcuts/); assignable actions appear in **Settings > Hotkeys**.
 
 ## workspaces
 
@@ -444,6 +452,8 @@ minWidth = 574.0
 ## Per-monitor overrides
 
 Five arrays hold per-monitor exceptions to the global tables. Every entry requires `monitorName`. Use the display’s `monitorDisplayUUID`; for a display without a UUID, supply both `monitorDisplayId` and `monitorName`. A name alone does not match a display. All entries except orientation also carry an `id` UUID identifying the override row, not the display. Override keys are all optional — an omitted key falls back to the corresponding global setting. All five arrays default to empty. Custom routing grids live separately in [`routing.arrangements`](#routing).
+
+When `workspaceBar.enabled = false`, no monitor can show its bar. Saved `monitorBarOverrides.enabled` values take effect again when the global bar is enabled.
 
 | Array | Overridable keys |
 | --- | --- |

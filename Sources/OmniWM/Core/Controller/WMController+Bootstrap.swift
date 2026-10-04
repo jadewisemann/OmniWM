@@ -23,6 +23,10 @@ extension WMController {
                 _ = commandHandler.handleHotkeyInvocation(invocation)
             }
         }
+        settings.onWorkspaceHotkeysChanged = { [weak self] in
+            guard let self else { return }
+            updateHotkeyBindings(settings.hotkeyBindings)
+        }
     }
 
     func configureSurfaceCallbacks() {
@@ -64,7 +68,9 @@ extension WMController {
             self?.axEventHandler.probeUnresolvedNativeFocus(after: handle.token)
         }
         workspaceManager.onWindowRemoved = { [weak self] entry in
+            self?.windowMarkRegistry.retire(entry.token)
             self?.windowActionHandlerStorage?.handleOverviewWindowRemoved(entry)
+            self?.layoutRefreshController.workspaceSwipe.windowRemoved(entry.token)
         }
         workspaceManager.onDeferredWorkspaceMonitorMove = { [weak self] outcome in
             self?.layoutRefreshController.commitWorkspaceMonitorTransition(outcome)
@@ -117,6 +123,9 @@ extension WMController {
         self.hiddenBarController.statusItems.fallbackPlacementsProvider = { [weak self] in
             self?.hiddenBarFallbackIconPlacements() ?? []
         }
+        self.workspaceBarManager.onPrimaryBarFramesChanged = { [weak self] in
+            self?.hiddenBarController.statusItems.syncFallbackIcon()
+        }
     }
 
     func setHotkeyRecordingActive(_ active: Bool) {
@@ -128,18 +137,19 @@ extension WMController {
         Task { @MainActor in
             let alert = NSAlert()
             alert.alertStyle = .warning
-            alert.messageText = "Enable “Displays have separate Spaces”"
-            alert.informativeText = "OmniWM requires the macOS setting “Displays have separate Spaces.” "
-                + "Turn it on in System Settings > Desktop & Dock > Mission Control, then log out and back in. "
-                + "Window management stays paused until it is enabled."
-            alert.addButton(withTitle: "OK")
+            alert.messageText = String(localized: "Enable “Displays have separate Spaces”")
+            alert.informativeText = String(localized:
+                "OmniWM requires the macOS setting “Displays have separate Spaces.” Turn it on in System Settings > Desktop & Dock > Mission Control, then log out and back in. Window management stays paused until it is enabled."
+            )
+            alert.addButton(withTitle: String(localized: "OK"))
             _ = alert.runModal()
         }
     }
 
     func updateHotkeyBindings(_ bindings: [HotkeyBinding], force: Bool = false) {
+        let enabledBindings = bindings.filter { settings.isCommandFeatureEnabled($0.command) }
         hotkeys.updateBindings(
-            bindings,
+            enabledBindings,
             systemHyperTrigger: settings.systemHyperTrigger,
             force: force
         )

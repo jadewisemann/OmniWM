@@ -9,6 +9,7 @@ import Foundation
 final class LockedWindowIdSet: @unchecked Sendable {
     private let lock = NSLock()
     private var ids: Set<Int> = []
+    private var hardSuppressedIds: Set<Int> = []
     private var hardSuppressed = false
 
     func insert(_ id: Int) {
@@ -26,7 +27,7 @@ final class LockedWindowIdSet: @unchecked Sendable {
     func contains(_ id: Int) -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        return hardSuppressed || ids.contains(id)
+        return hardSuppressed || hardSuppressedIds.contains(id) || ids.contains(id)
     }
 
     func setHardSuppressed(_ hardSuppressed: Bool) {
@@ -35,10 +36,20 @@ final class LockedWindowIdSet: @unchecked Sendable {
         lock.unlock()
     }
 
-    func isHardSuppressed() -> Bool {
+    func setHardSuppressed(_ suppressed: Bool, for id: Int) {
+        lock.lock()
+        if suppressed {
+            hardSuppressedIds.insert(id)
+        } else {
+            hardSuppressedIds.remove(id)
+        }
+        lock.unlock()
+    }
+
+    func isHardSuppressed(for id: Int) -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        return hardSuppressed
+        return hardSuppressed || hardSuppressedIds.contains(id)
     }
 
     func moveIfPresent(from oldId: Int, to newId: Int) {
@@ -46,12 +57,16 @@ final class LockedWindowIdSet: @unchecked Sendable {
         if oldId != newId, ids.remove(oldId) != nil {
             ids.insert(newId)
         }
+        if oldId != newId, hardSuppressedIds.remove(oldId) != nil {
+            hardSuppressedIds.insert(newId)
+        }
         lock.unlock()
     }
 
     func retainOnly(_ retainedIds: Set<Int>) {
         lock.lock()
         ids.formIntersection(retainedIds)
+        hardSuppressedIds.formIntersection(retainedIds)
         lock.unlock()
     }
 }
@@ -163,26 +178,26 @@ final class LockedEnhancedUIStateMap: @unchecked Sendable {
 final class LockedClosingFrameGenerationMap: @unchecked Sendable {
     private let lock = NSLock()
     private var nextGeneration: UInt64 = 1
-    private var generations: [UUID: UInt64] = [:]
+    private var generations: [UUID: (windowId: Int, generation: UInt64)] = [:]
 
-    func nextGeneration(for animationId: UUID) -> UInt64 {
+    func nextGeneration(for animationId: UUID, windowId: Int) -> UInt64 {
         lock.lock()
         defer { lock.unlock() }
         let generation = nextGeneration
         nextGeneration &+= 1
-        generations[animationId] = generation
+        generations[animationId] = (windowId: windowId, generation: generation)
         return generation
     }
 
     func isCurrent(_ generation: UInt64, for animationId: UUID) -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        return generations[animationId] == generation
+        return generations[animationId]?.generation == generation
     }
 
     func removeIfCurrent(_ generation: UInt64, for animationId: UUID) {
         lock.lock()
-        if generations[animationId] == generation {
+        if generations[animationId]?.generation == generation {
             generations.removeValue(forKey: animationId)
         }
         lock.unlock()
@@ -192,6 +207,12 @@ final class LockedClosingFrameGenerationMap: @unchecked Sendable {
         lock.lock()
         nextGeneration &+= 1
         generations.removeAll(keepingCapacity: true)
+        lock.unlock()
+    }
+
+    func invalidate(for windowId: Int) {
+        lock.lock()
+        generations = generations.filter { $0.value.windowId != windowId }
         lock.unlock()
     }
 }

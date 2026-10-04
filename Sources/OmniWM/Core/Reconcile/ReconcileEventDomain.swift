@@ -9,9 +9,11 @@ enum ReconcileEventDomain {
     case focus
     case viewport
     case session
+}
 
-    static func domain(for event: WMEvent) -> ReconcileEventDomain {
-        switch event {
+extension WMEvent {
+    var reconcileDomain: ReconcileEventDomain {
+        switch self {
         case .windowAdmitted,
              .windowRekeyed,
              .windowRemoved,
@@ -27,6 +29,7 @@ enum ReconcileEventDomain {
              .layoutOperationPerformed,
              .managedReplacementMetadataChanged,
              .hiddenApplicationsChanged,
+             .windowMinimizedChanged,
              .appVisibilityInvalidated,
              .hiddenStateChanged,
              .nativeFullscreenTransition:

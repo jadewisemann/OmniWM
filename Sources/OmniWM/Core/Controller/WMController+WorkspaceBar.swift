@@ -6,17 +6,25 @@ import Foundation
 import OmniWMIPC
 
 extension WMController {
+    var workspaceBarRefreshIsEnabled: Bool {
+        settings.workspaceBar.enabled
+    }
+
     func setWorkspaceBarEnabled(_ enabled: Bool) {
         if settings.workspaceBar.enabled != enabled {
             settings.workspaceBar.enabled = enabled
         }
         pruneHiddenWorkspaceBarMonitorIds()
         workspaceBarManager.setup(controller: self, settings: settings)
+        if !enabled {
+            workspaceBarManager.cleanup()
+        }
         workspaceManager.invalidateAllLayouts()
         layoutRefreshController.requestRelayout(reason: .monitorSettingsChanged)
         surfaceReconciler.noteWorldChanged()
         syncWorkspaceBarRevealMonitor()
         hiddenBarController.dismissPanel()
+        updateHiddenBarSettings()
     }
 
     func requestWorkspaceBarRefresh() {
@@ -52,6 +60,7 @@ extension WMController {
     }
 
     func updateWorkspaceBarSettings(forceIconReload: Bool = false) {
+        workspaceBarManager.syncHoverPreview(controller: self, settings: settings)
         synchronizeWorkspaceBarIconOverrides(
             forceReload: forceIconReload
         )
@@ -59,6 +68,7 @@ extension WMController {
         workspaceManager.invalidateAllLayouts()
         layoutRefreshController.requestRelayout(reason: .monitorSettingsChanged)
         surfaceReconciler.noteWorldChanged()
+        windowActionHandlerStorage?.refreshOverviewProjection(affectedWorkspaceIds: [])
         syncWorkspaceBarRevealMonitor()
         hiddenBarController.dismissPanel()
     }
@@ -110,15 +120,11 @@ extension WMController {
     }
 
     func focusWorkspaceFromBar(id workspaceId: WorkspaceDescriptor.ID) {
-        windowActionHandler.focusWorkspaceFromBar(id: workspaceId)
-    }
-
-    func focusWindowFromBar(token: WindowToken) {
-        windowActionHandler.focusWindowFromBar(token: token)
+        windowActionHandler.focusWorkspaceFromBar(id: workspaceId, focusOrigin: .pointerSelection)
     }
 
     func focusWindowFromBar(handle: WindowHandle) {
-        windowActionHandler.focusWindowFromBar(handle: handle)
+        windowActionHandler.focusWindowFromBar(handle: handle, focusOrigin: .pointerSelection)
     }
 
     @discardableResult
@@ -143,7 +149,7 @@ extension WMController {
         if let monitorId {
             _ = workspaceManager.setInteractionMonitor(monitorId)
         }
-        return toggleScratchpad(index, on: monitorId)
+        return toggleScratchpad(index, on: monitorId, focusOrigin: .pointerSelection)
     }
 
     func publishWorkspaceDataChanged() {

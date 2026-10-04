@@ -34,3 +34,9 @@ final class HiddenBarSettings {
         rehideIntervalSeconds = HiddenBarSettingsPolicy.validatedRehideIntervalSeconds(values.rehideIntervalSeconds)
     }
 }
+
+extension SettingsStore {
+    var effectiveHiddenBarEnabled: Bool {
+        hiddenBar.enabled && workspaceBar.enabled
+    }
+}

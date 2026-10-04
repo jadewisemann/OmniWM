@@ -7,7 +7,7 @@ struct HiddenBarRunningAppsSnapshot {
     let bundleIDs: Set<String>
     let candidates: [MenuBarAppCandidate]
 
-    static func current() -> HiddenBarRunningAppsSnapshot {
+    static func current(includingNames: Bool = false) -> HiddenBarRunningAppsSnapshot {
         let applications = NSWorkspace.shared.runningApplications
         var bundleIDs: Set<String> = []
         var candidates: [MenuBarAppCandidate] = []
@@ -19,7 +19,7 @@ struct HiddenBarRunningAppsSnapshot {
             candidates.append(MenuBarAppCandidate(
                 bundleID: bundleID,
                 pid: app.processIdentifier,
-                name: app.localizedName ?? bundleID
+                name: includingNames ? app.localizedName ?? bundleID : bundleID
             ))
         }
         return HiddenBarRunningAppsSnapshot(bundleIDs: bundleIDs, candidates: candidates)

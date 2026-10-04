@@ -16,14 +16,15 @@ final class CLIInvocationParsingTests: XCTestCase {
             (["rule", "remove", "B9B137A2-9406-4D68-BD0E-8ED465450413"], .rule),
             (["capture", "status"], .capture),
             (["workspace", "focus-name", "1"], .workspace),
-            (["window", "focus", "window-id"], .window)
+            (["window", "focus", "window-id"], .window),
+            (["window", "mark", "list"], .windowMark)
         ]
         for testCase in cases {
             for formatArguments in [[], ["--format", "json"]] {
                 let parsed = try CLIParser.parse(arguments: ["omniwmctl"] + formatArguments + testCase.arguments)
 
                 XCTAssertEqual(parsed.request.kind, testCase.kind)
-                XCTAssertEqual(parsed.request.version, 15)
+                XCTAssertEqual(parsed.request.version, 17)
                 XCTAssertNotNil(UUID(uuidString: parsed.request.id))
                 XCTAssertEqual(parsed.outputFormat, !formatArguments.isEmpty || testCase.kind == .query ? .json : .text)
                 XCTAssertFalse(parsed.expectsEventStream)

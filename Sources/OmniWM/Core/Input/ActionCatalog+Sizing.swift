@@ -86,7 +86,7 @@ extension ActionCatalog {
         specs.append(contentsOf: [
             action(
                 id: "setContainerPrimarySpan.decrease10Percent",
-                command: .sizing(.setContainerPrimarySpan(.adjustProportion(-10))),
+                command: .sizing(.resizeContainerPrimarySpan(grow: false)),
                 category: .column,
                 binding: KeyBinding(keyCode: UInt32(kVK_ANSI_Minus), modifiers: UInt32(optionKey)),
                 visibility: .advanced,
@@ -94,7 +94,7 @@ extension ActionCatalog {
             ),
             action(
                 id: "setContainerPrimarySpan.increase10Percent",
-                command: .sizing(.setContainerPrimarySpan(.adjustProportion(10))),
+                command: .sizing(.resizeContainerPrimarySpan(grow: true)),
                 category: .column,
                 binding: KeyBinding(keyCode: UInt32(kVK_ANSI_Equal), modifiers: UInt32(optionKey)),
                 visibility: .advanced,
@@ -102,7 +102,7 @@ extension ActionCatalog {
             ),
             action(
                 id: "setWindowPrimarySpan.decrease10Percent",
-                command: .sizing(.setWindowPrimarySpan(.adjustProportion(-10))),
+                command: .sizing(.resizeWindowPrimarySpan(grow: false)),
                 category: .column,
                 binding: .unassigned,
                 visibility: .advanced,
@@ -110,7 +110,7 @@ extension ActionCatalog {
             ),
             action(
                 id: "setWindowPrimarySpan.increase10Percent",
-                command: .sizing(.setWindowPrimarySpan(.adjustProportion(10))),
+                command: .sizing(.resizeWindowPrimarySpan(grow: true)),
                 category: .column,
                 binding: .unassigned,
                 visibility: .advanced,
@@ -118,7 +118,7 @@ extension ActionCatalog {
             ),
             action(
                 id: "setWindowSecondarySpan.decrease10Percent",
-                command: .sizing(.setWindowSecondarySpan(.adjustProportion(-10))),
+                command: .sizing(.resizeWindowSecondarySpan(grow: false)),
                 category: .column,
                 binding: KeyBinding(keyCode: UInt32(kVK_ANSI_Minus), modifiers: UInt32(optionKey | shiftKey)),
                 visibility: .advanced,
@@ -126,7 +126,7 @@ extension ActionCatalog {
             ),
             action(
                 id: "setWindowSecondarySpan.increase10Percent",
-                command: .sizing(.setWindowSecondarySpan(.adjustProportion(10))),
+                command: .sizing(.resizeWindowSecondarySpan(grow: true)),
                 category: .column,
                 binding: KeyBinding(keyCode: UInt32(kVK_ANSI_Equal), modifiers: UInt32(optionKey | shiftKey)),
                 visibility: .advanced,

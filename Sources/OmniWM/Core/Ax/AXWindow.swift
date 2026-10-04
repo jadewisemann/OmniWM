@@ -176,6 +176,13 @@ enum AXWindowService {
         return pinnedElements[windowId]
     }
 
+    static func unpinAXElement(for windowId: UInt32, matching element: AXUIElement) {
+        pinnedElementsLock.lock()
+        defer { pinnedElementsLock.unlock() }
+        guard let current = pinnedElements[windowId], CFEqual(current, element) else { return }
+        pinnedElements.removeValue(forKey: windowId)
+    }
+
     static func pinnedWindowId(for windowId: UInt32) -> CGWindowID? {
         guard let pinned = pinnedAXElement(for: windowId) else { return nil }
         var resolvedWindowId: CGWindowID = 0
@@ -276,23 +283,61 @@ enum AXWindowService {
         } succeeded: { $0.role != nil }
     }
 
+    static func pinnedAXWindowRef(for windowId: UInt32, pid: pid_t) -> AXWindowRef? {
+        guard let pinned = pinnedAXElement(for: windowId) else { return nil }
+        var winId: CGWindowID = 0
+        let result = MainThreadAXSpanTrace.measure(.lookupPinnedWindowID, pid: pid, windowId: Int(windowId)) {
+            _AXUIElementGetWindow(pinned, &winId)
+        } succeeded: { $0 == .success } status: { $0.rawValue } resolvedWindowId: {
+            $0 == .success ? Int(winId) : nil
+        }
+        if result == .success, winId == windowId {
+            return AXWindowRef(element: pinned, windowId: Int(winId))
+        }
+        unpinAXElement(for: windowId, matching: pinned)
+        return nil
+    }
+
+    static func uncachedWindowRef(
+        windowId: UInt32,
+        pid: pid_t,
+        deadline: TimeInterval,
+        checkCancellation: () throws -> Void
+    ) throws -> AXWindowRef? {
+        func checkOperation() throws {
+            try checkCancellation()
+            guard ProcessInfo.processInfo.systemUptime < deadline else {
+                throw AXWindowEnumerationError.timedOut
+            }
+        }
+        try checkOperation()
+        let windows = try AXWindowEnumerationInspector.applicationWindowElements(
+            AXUIElementCreateApplication(pid),
+            deadline: deadline,
+            checkCancellation: checkOperation
+        )
+        for window in windows {
+            guard try AXWindowEnumerationInspector.windowId(
+                for: window,
+                deadline: deadline,
+                checkCancellation: checkOperation
+            ) == Int(windowId) else { continue }
+            try checkOperation()
+            return AXWindowRef(element: window, windowId: Int(windowId))
+        }
+        try checkOperation()
+        return nil
+    }
+
     static func axWindowRef(for windowId: UInt32, pid: pid_t) -> AXWindowRef? {
         MainThreadAXSpanTrace.measure(.lookupWindowRef, pid: pid, windowId: Int(windowId)) {
-            if let pinned = pinnedAXElement(for: windowId) {
-                var winId: CGWindowID = 0
-                if _AXUIElementGetWindow(pinned, &winId) == .success, winId == windowId {
-                    return AXWindowRef(element: pinned, windowId: Int(winId))
-                }
-                unpinAXElement(for: windowId)
-            }
+            if let pinned = pinnedAXWindowRef(for: windowId, pid: pid) { return pinned }
 
             let appElement = AXUIElementCreateApplication(pid)
             var windowsRef: CFTypeRef?
-            let result = AXUIElementCopyAttributeValue(
-                appElement,
-                kAXWindowsAttribute as CFString,
-                &windowsRef
-            )
+            let result = MainThreadAXSpanTrace.measure(.readApplicationWindows, pid: pid, windowId: Int(windowId)) {
+                AXUIElementCopyAttributeValue(appElement, kAXWindowsAttribute as CFString, &windowsRef)
+            } succeeded: { $0 == .success } status: { $0.rawValue }
 
             guard result == .success, let windows = windowsRef as? [AXUIElement] else {
                 return nil
@@ -300,7 +345,14 @@ enum AXWindowService {
 
             for window in windows {
                 var winId: CGWindowID = 0
-                if _AXUIElementGetWindow(window, &winId) == .success, winId == windowId {
+                let result = MainThreadAXSpanTrace.measure(
+                    .lookupCandidateWindowID, pid: pid, windowId: Int(windowId), count: windows.count
+                ) {
+                    _AXUIElementGetWindow(window, &winId)
+                } succeeded: { $0 == .success } status: { $0.rawValue } resolvedWindowId: {
+                    $0 == .success ? Int(winId) : nil
+                }
+                if result == .success, winId == windowId {
                     return AXWindowRef(element: window, windowId: Int(winId))
                 }
             }

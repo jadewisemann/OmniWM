@@ -78,6 +78,7 @@ struct AppAXFrameWriteTrace {
                     startedNs: attempt.startedNs,
                     enqueuedAt: item?.enqueuedAt
                 ),
+                preReadNs: attempt.timing.preReadNs,
                 sizeNs: attempt.timing.sizeNs,
                 positionNs: attempt.timing.positionNs,
                 verificationNs: attempt.timing.verificationNs,

@@ -53,7 +53,7 @@ extension WMController {
         }
         guard !workspaceManager.isAppHidden(pid: pid) else { return false }
         if let entry = workspaceManager.entry(forWindowId: windowId),
-           workspaceManager.isAppHidden(pid: entry.pid)
+           workspaceManager.isWindowSuppressedByMacOS(entry.token)
         {
             return false
         }
@@ -64,17 +64,21 @@ extension WMController {
     func performWindowFronting(
         pid: pid_t,
         windowId: Int,
-        axRef: AXWindowRef,
-        raisesWindow: Bool = true
+        axRef: AXWindowRef
     ) -> Bool {
         guard canFocusWindow(pid: pid, windowId: windowId) else { return false }
         MainThreadAXSpanTrace.measure(.fronting, pid: pid, windowId: windowId) {
             windowFocusOperations.activateApp(pid)
             windowFocusOperations.focusSpecificWindow(pid, UInt32(windowId), axRef.element)
-            if raisesWindow {
-                windowFocusOperations.raiseWindow(axRef.element)
-            }
+            windowFocusOperations.raiseWindow(axRef.element)
         }
+        return true
+    }
+
+    @discardableResult
+    func submitWindowFocus(pid: pid_t, windowId: Int, axRef: AXWindowRef) -> Bool {
+        guard canFocusWindow(pid: pid, windowId: windowId) else { return false }
+        windowFocusOperations.submitFocusSpecificWindow(pid, UInt32(windowId), axRef.element)
         return true
     }
 
@@ -91,7 +95,7 @@ extension WMController {
 
     func performWindowOrdering(windowId: Int) {
         if let entry = workspaceManager.entry(forWindowId: windowId),
-           workspaceManager.isAppHidden(pid: entry.pid)
+           workspaceManager.isWindowSuppressedByMacOS(entry.token)
         {
             return
         }

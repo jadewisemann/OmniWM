@@ -69,7 +69,11 @@ final class OverviewSnapshot {
         var workspaces: [OverviewWorkspaceLayoutItem] = []
         for monitor in workspaceManager.monitors {
             let activeWorkspaceId = workspaceManager.activeWorkspace(on: monitor.id)?.id
-            for workspace in workspaceManager.workspaces(on: monitor.id) {
+            for workspace in displayedWorkspaces(
+                on: monitor,
+                activeWorkspaceId: activeWorkspaceId,
+                workspaceManager: workspaceManager
+            ) {
                 workspaces.append(OverviewWorkspaceLayoutItem(
                     id: workspace.id,
                     name: wmController.settings.workspaces.displayName(for: workspace.name),
@@ -173,7 +177,11 @@ final class OverviewSnapshot {
         for monitor in workspaceManager.monitors {
             let activeWs = workspaceManager.activeWorkspace(on: monitor.id)
 
-            for ws in workspaceManager.workspaces(on: monitor.id) {
+            for ws in displayedWorkspaces(
+                on: monitor,
+                activeWorkspaceId: activeWs?.id,
+                workspaceManager: workspaceManager
+            ) {
                 workspaces.append(OverviewWorkspaceLayoutItem(
                     id: ws.id,
                     name: wmController.settings.workspaces.displayName(for: ws.name),
@@ -210,6 +218,18 @@ final class OverviewSnapshot {
         windows = windowData
         self.dwindleGroupsByWorkspace = dwindleGroupsByWorkspace
         niriSnapshotsByWorkspace = buildNiriOverviewSnapshots()
+    }
+
+    private func displayedWorkspaces(
+        on monitor: Monitor,
+        activeWorkspaceId: WorkspaceDescriptor.ID?,
+        workspaceManager: WorkspaceManager
+    ) -> [WorkspaceDescriptor] {
+        let workspaces = workspaceManager.workspaces(on: monitor.id)
+        guard wmController?.settings.workspaceBar.resolved(for: monitor).hideEmptyWorkspaces == true else {
+            return workspaces
+        }
+        return workspaces.filter { $0.id == activeWorkspaceId || workspaceManager.isOccupied($0.id) }
     }
 }
 

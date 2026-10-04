@@ -73,7 +73,7 @@ private struct GlobalNiriSettingsSection: View {
 
         Section("Niri Layout") {
             SettingsSliderRow(
-                label: "Visible Containers",
+                label: String(localized: "Visible Containers"),
                 value: Binding(
                     get: { Double(settings.niri.visibleContainerCount) },
                     set: { settings.niri.visibleContainerCount = Int($0) }
@@ -99,7 +99,7 @@ private struct GlobalNiriSettingsSection: View {
 
             Picker("Center Focused Column", selection: Bindable(settings.niri).centerFocusedColumn) {
                 ForEach(CenterFocusedColumn.allCases, id: \.self) { mode in
-                    Text(mode.displayName).tag(mode)
+                    Text(mode.localizedDisplayName).tag(mode)
                 }
             }
             .onChange(of: settings.niri.centerFocusedColumn) { _, newValue in
@@ -111,8 +111,13 @@ private struct GlobalNiriSettingsSection: View {
                     controller.updateNiriConfig(alwaysCenterSingleColumn: newValue)
                 }
 
+            Toggle("Gaps at Screen Edges", isOn: Bindable(settings.niri).edgeGaps)
+                .onChange(of: settings.niri.edgeGaps) { _, _ in
+                    controller.updateMonitorGapSettings()
+                }
+
             SingleWindowFitControls(
-                label: "Single Window",
+                label: String(localized: "Single Window"),
                 fit: settings.niri.singleWindowFit,
                 modes: SingleWindowFit.niriModes,
                 onChange: { newValue in
@@ -121,9 +126,20 @@ private struct GlobalNiriSettingsSection: View {
                 }
             )
             SettingsCaption(
-                "How a lone window is sized: Full Screen fills the work area; "
-                    + "Custom uses a fixed width × height; Container Primary Span keeps the configured primary span."
+                localized: "How a lone window is sized: Full Screen fills the work area; Custom uses a fixed width × height; Container Primary Span keeps the configured primary span."
             )
+
+            LabeledContent("Resize Increment") {
+                HStack {
+                    TextField("Resize Increment", value: Bindable(settings.niri).resizeStepPercent, format: .number)
+                        .labelsHidden()
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 48)
+                        .multilineTextAlignment(.trailing)
+                    Text("%")
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
 
         Section("Default New Container Primary Span") {
@@ -150,8 +166,8 @@ private struct GlobalNiriSettingsSection: View {
 
             SettingsCaption(
                 settings.niri.defaultContainerPrimarySpan == nil
-                    ? "Auto divides the primary axis by the Visible Containers setting."
-                    : "New or claimed containers start at this primary span until you resize them."
+                    ? String(localized: "Auto divides the primary axis by the Visible Containers setting.")
+                    : String(localized: "New or claimed containers start at this primary span until you resize them.")
             )
         }
 
@@ -207,7 +223,7 @@ private struct GlobalNiriSettingsSection: View {
                     controller.updateNiriConfig(containerPrimarySpanPresets: settings.niri.containerPrimarySpanPresets)
                 }
             }
-            SettingsCaption("Resize commands cycle through these presets in order. Duplicates are allowed.")
+            SettingsCaption(localized: "Span-cycling commands use these presets in order. Duplicates are allowed.")
         }
         .id(settings.niri.containerPrimarySpanPresets.count)
     }
@@ -236,7 +252,7 @@ private struct MonitorNiriSettingsSection: View {
 
         Section("Niri Layout") {
             OverridableSlider(
-                label: "Visible Containers",
+                label: String(localized: "Visible Containers"),
                 value: ms.visibleContainerCount.map { Double($0) },
                 globalValue: Double(settings.niri.visibleContainerCount),
                 range: 1 ... 5,
@@ -252,7 +268,7 @@ private struct MonitorNiriSettingsSection: View {
             )
 
             OverridableToggle(
-                label: "Infinite Loop Navigation",
+                label: String(localized: "Infinite Loop Navigation"),
                 value: ms.infiniteLoop,
                 globalValue: settings.niri.infiniteLoop,
                 onChange: { newValue in updateSetting { $0.infiniteLoop = newValue } },
@@ -260,17 +276,17 @@ private struct MonitorNiriSettingsSection: View {
             )
 
             OverridablePicker(
-                label: "Center Focused Column",
+                label: String(localized: "Center Focused Column"),
                 value: ms.centerFocusedColumn,
                 globalValue: settings.niri.centerFocusedColumn,
                 options: CenterFocusedColumn.allCases,
-                displayName: { $0.displayName },
+                displayName: { $0.localizedDisplayName },
                 onChange: { newValue in updateSetting { $0.centerFocusedColumn = newValue } },
                 onReset: { updateSetting { $0.centerFocusedColumn = nil } }
             )
 
             OverridableToggle(
-                label: "Always Center Single Column",
+                label: String(localized: "Always Center Single Column"),
                 value: ms.alwaysCenterSingleColumn,
                 globalValue: settings.niri.alwaysCenterSingleColumn,
                 onChange: { newValue in updateSetting { $0.alwaysCenterSingleColumn = newValue } },
@@ -278,7 +294,7 @@ private struct MonitorNiriSettingsSection: View {
             )
 
             SingleWindowFitControls(
-                label: "Single Window",
+                label: String(localized: "Single Window"),
                 fit: ms.singleWindowFit ?? settings.niri.singleWindowFit,
                 modes: SingleWindowFit.niriModes,
                 isOverridden: ms.singleWindowFit != nil,

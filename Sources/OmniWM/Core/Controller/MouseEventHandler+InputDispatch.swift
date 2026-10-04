@@ -21,7 +21,8 @@ extension MouseEventHandler {
             workspaceSwipeEnabled: settings.gestures.workspaceSwipeEnabled && !isOverviewOpen,
             workspaceSwipeFingerCount: settings.gestures.workspaceSwipeFingerCount.rawValue,
             workspaceSwipeAxis: settings.gestures.workspaceSwipeAxis,
-            overviewAction: settings.gestures.overviewGestureEnabled ? overviewState.gestureAction : nil,
+            overviewAction: settings.overview.enabled && settings.gestures.overviewGestureEnabled
+                ? overviewState.gestureAction : nil,
             overviewFingerCount: settings.gestures.overviewGestureFingerCount.rawValue,
             windowMoveEnabled: settings.gestures.windowMoveEnabled && !isOverviewOpen,
             windowMoveFingerCount: settings.gestures.windowMoveFingerCount.rawValue,
@@ -154,6 +155,7 @@ extension MouseEventHandler {
         guard type == .otherMouseDown,
               let controller,
               OverviewInputSettingsValidation.mouseButtons.contains(button),
+              controller.settings.overview.enabled,
               controller.settings.overview.mouseButton == button,
               controller.settings.systemHyperTrigger.mouseButtonNumber != button
         else { return false }
@@ -290,7 +292,7 @@ extension MouseEventHandler {
         if isTrackpad { return trackpadScrollDecision(momentumPhase: momentumPhase, phase: phase) }
 
         guard let controller, controller.isEnabled,
-              controller.settings.gestures.trackpadGesturesEnabled
+              controller.settings.effectiveTrackpadGesturesEnabled
         else {
             return .wheelDisabled
         }

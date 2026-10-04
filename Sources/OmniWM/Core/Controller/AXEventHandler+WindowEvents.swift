@@ -23,16 +23,11 @@ extension AXEventHandler {
             WindowAdmissionTrace.record(
                 .init(action: .cgsDestroyed, windowId: Int(windowId), reason: "destroyed")
             )
-            handleCGSSpaceWindowDestroyed(windowId: windowId)
+            enqueueLifecycleQuery(windowId: windowId, kind: .spaceDestroyed)
             refreshWindowSubscriptions()
 
         case let .closed(windowId):
-            beginWindowSubscriptionIdentityTransition()
-            WindowAdmissionTrace.record(
-                .init(action: .cgsDestroyed, windowId: Int(windowId), reason: "closed")
-            )
-            handleCGSWindowDestroyed(windowId: windowId, evidence: .windowClosed)
-            refreshWindowSubscriptions()
+            handleCGSWindowClosed(windowId: windowId)
 
         case let .frameChanged(windowId):
             handleFrameChanged(windowId: windowId)
@@ -65,14 +60,24 @@ extension AXEventHandler {
         }
     }
 
+    private func handleCGSWindowClosed(windowId: UInt32) {
+        beginWindowSubscriptionIdentityTransition()
+        WindowAdmissionTrace.record(.init(action: .cgsDestroyed, windowId: Int(windowId), reason: "closed"))
+        cancelQueuedWindowCreation(windowId: windowId)
+        cancelCGSWindowAdmission(windowId: windowId)
+        enqueueLifecycleQuery(windowId: windowId, kind: .closed)
+        refreshWindowSubscriptions()
+    }
+
     private func handleWindowOrderChanged(windowId: UInt32) {
-        guard let controller else { return }
-        guard !controller.isOwnedWindow(windowNumber: Int(windowId)) else { return }
-        guard case let .exact(token, _) = resolveWindowServerIdentity(windowId),
+        enqueueLifecycleQuery(windowId: windowId, kind: .orderChanged)
+    }
+
+    func applyWindowOrderChanged(windowId: UInt32, windowInfo: WindowServerInfo?) {
+        guard let controller,
+              case let .exact(token, _) = WindowServerIdentityResolution(windowId: windowId, info: windowInfo),
               controller.workspaceManager.entry(for: token) != nil
-        else {
-            return
-        }
+        else { return }
         controller.surfaceReconciler.noteRestackOccurred()
     }
 
@@ -105,21 +110,71 @@ extension AXEventHandler {
         fallbackToken: WindowToken? = nil,
         fallbackAXRef: AXWindowRef? = nil,
         placementOrigin: WorkspacePlacementOrigin = .liveCreate,
-        retryTrigger: AdmissionRetryTrigger = .create
+        retryTrigger: AdmissionRetryTrigger = .create,
+        retryExecution: AdmissionRetryExecution? = nil
     ) {
-        guard let controller else { return }
+        guard canProcessCreatedWindow(windowId: windowId, retryExecution: retryExecution) else { return }
+        enqueueLifecycleQuery(
+            windowId: windowId,
+            kind: .created(.init(
+                placementContext: pendingCreatePlacementContext(for: Int(windowId)),
+                fallbackToken: fallbackToken, fallbackAXRef: fallbackAXRef,
+                placementOrigin: placementOrigin, retryTrigger: retryTrigger, retryExecution: retryExecution
+            ))
+        )
+    }
+
+    func canProcessCreatedWindow(windowId: UInt32, retryExecution: AdmissionRetryExecution?) -> Bool {
+        guard let controller else { return false }
         if controller.isDiscoveryInProgress {
+            if let retryExecution {
+                suspendCreatedWindowLookupExecution(retryExecution)
+            }
             deferCreateDuringDiscovery(windowId)
-            return
+            return false
         }
         if controller.isOwnedWindow(windowNumber: Int(windowId)) {
             rejectOwnedCreate(windowId)
-            return
+            return false
         }
+        return true
+    }
 
-        let windowInfo = resolveWindowInfo(windowId)
+    func processCreatedWindowObservation(
+        windowId: UInt32,
+        windowInfo: WindowServerInfo?,
+        fallbackToken: WindowToken? = nil,
+        fallbackAXRef: AXWindowRef? = nil,
+        placementOrigin: WorkspacePlacementOrigin = .liveCreate,
+        retryTrigger: AdmissionRetryTrigger = .create,
+        retryExecution: AdmissionRetryExecution? = nil
+    ) {
         if let windowInfo, isOwnProcessPid(pid_t(windowInfo.pid)) {
             rejectOwnedCreate(windowId)
+            return
+        }
+        prepareAndTrackCreatedWindow(
+            windowId: windowId, windowInfo: windowInfo,
+            fallbackToken: fallbackToken, fallbackAXRef: fallbackAXRef,
+            placementOrigin: placementOrigin, retryTrigger: retryTrigger, retryExecution: retryExecution
+        )
+    }
+
+    func prepareAndTrackCreatedWindow(
+        windowId: UInt32,
+        windowInfo: WindowServerInfo?,
+        fallbackToken: WindowToken? = nil,
+        fallbackAXRef: AXWindowRef? = nil,
+        placementOrigin: WorkspacePlacementOrigin = .liveCreate,
+        retryTrigger: AdmissionRetryTrigger = .create,
+        retryExecution: AdmissionRetryExecution? = nil
+    ) {
+        let token = fallbackToken ?? windowInfo?.token(matching: windowId)
+        let axRef = fallbackAXRef?.windowId == Int(windowId) ? fallbackAXRef : token.flatMap {
+            AXWindowService.pinnedAXWindowRef(for: windowId, pid: $0.pid)
+        }
+        if let token, axRef == nil {
+            requestCreatedWindowIdentity(token: token, execution: retryExecution)
             return
         }
         let createPlacementContext = pendingCreatePlacementContext(for: Int(windowId))
@@ -131,7 +186,7 @@ extension AXEventHandler {
             windowId: windowId,
             windowInfo: windowInfo,
             fallbackToken: fallbackToken,
-            fallbackAXRef: fallbackAXRef,
+            fallbackAXRef: axRef,
             allowsTrackedIdentityReplacement: retryTrigger.allowsTrackedIdentityReplacement,
             placementOrigin: effectivePlacementOrigin,
             createPlacementContext: createPlacementContext
@@ -155,7 +210,7 @@ extension AXEventHandler {
         trackPreparedCreate(candidate)
     }
 
-    private func deferCreateDuringDiscovery(_ windowId: UInt32) {
+    func deferCreateDuringDiscovery(_ windowId: UInt32) {
         WindowAdmissionTrace.record(
             .init(
                 action: .admissionPending,
@@ -181,13 +236,6 @@ extension AXEventHandler {
         rejectDeferredReplacement(windowId: windowId)
     }
 
-    private func handleCGSSpaceWindowDestroyed(windowId: UInt32) {
-        if resolveWindowInfo(windowId) != nil { return }
-        if let controller, let entry = controller.workspaceManager.entry(forWindowId: Int(windowId)),
-           controller.workspaceManager.hiddenState(for: entry.token) != nil { return }
-        handleCGSWindowDestroyed(windowId: windowId, evidence: .transientLifecycle)
-    }
-
     func subscribeToManagedWindows() {
         refreshWindowSubscriptions()
     }
@@ -201,10 +249,16 @@ extension AXEventHandler {
             .selectWindowSpace(from: spaceIdsForWindow(windowId)) ?? 0
     }
 
-    private func handleCGSWindowDestroyed(
+    func completeCGSWindowDestroyed(
         windowId: UInt32,
-        evidence: WindowDestroyEvidence
+        evidence: WindowDestroyEvidence,
+        windowInfo: WindowServerInfo?
     ) {
+        cancelCGSWindowAdmission(windowId: windowId)
+        handleWindowDestroyed(windowId: windowId, pidHint: nil, evidence: evidence, windowInfo: windowInfo)
+    }
+
+    private func cancelCGSWindowAdmission(windowId: UInt32) {
         AXWindowService.invalidateCachedTitle(windowId: windowId)
         let retryRetainCount = cancelCreatedWindowRetry(windowId: windowId)
         if retryRetainCount == 0 {
@@ -213,11 +267,32 @@ extension AXEventHandler {
         discardCreatePlacementContext(windowId: windowId)
         removeDeferredCreatedWindow(windowId)
         rejectDeferredReplacement(windowId: windowId)
-        handleWindowDestroyed(windowId: windowId, pidHint: nil, evidence: evidence)
+        cancelFrameObservation(windowId: windowId)
     }
 
     func processDeferredCreatedWindow(
-        _ windowId: UInt32, controller: WMController, spaceIdsForWindow: (UInt32) -> [UInt64]
+        _ windowId: UInt32, controller: WMController, spaceIdsForWindow: @escaping (UInt32) -> [UInt64]
+    ) {
+        if case .identityRebind = admissionRetryStateByWindowId[windowId]?.trigger {
+            removeDeferredCreatedWindow(windowId)
+            return
+        }
+        guard !controller.isOwnedWindow(windowNumber: Int(windowId)) else {
+            rejectOwnedCreate(windowId)
+            return
+        }
+        enqueueLifecycleQuery(
+            windowId: windowId,
+            kind: .created(.init(
+                placementContext: pendingCreatePlacementContext(for: Int(windowId)),
+                deferredSpaceQuery: spaceIdsForWindow
+            ))
+        )
+    }
+
+    func applyDeferredCreatedWindow(
+        _ windowId: UInt32, controller: WMController, windowInfo: WindowServerInfo?,
+        spaceIdsForWindow: (UInt32) -> [UInt64]
     ) {
         let retryState = admissionRetryStateByWindowId[windowId]
         let retryTrigger = retryState?.trigger ?? .create
@@ -230,7 +305,6 @@ extension AXEventHandler {
             rejectDeferredReplacement(windowId: windowId)
             return
         }
-        let windowInfo = resolveWindowInfo(windowId)
         guard let windowInfo else {
             _ = scheduleAdmissionRetry(
                 windowId: windowId,
@@ -269,34 +343,13 @@ extension AXEventHandler {
         _ windowId: UInt32, windowInfo: WindowServerInfo?, retryState: AdmissionRetryState?,
         trigger retryTrigger: AdmissionRetryTrigger
     ) {
-        let createPlacementContext = pendingCreatePlacementContext(for: Int(windowId))
-        let placementOrigin = Self.effectivePlacementOrigin(
-            retryTrigger.placementOrigin,
-            createPlacementContext: createPlacementContext
-        )
-        let outcome = prepareCreateCandidate(
+        prepareAndTrackCreatedWindow(
             windowId: windowId,
             windowInfo: windowInfo,
             fallbackToken: retryState?.expectedToken,
             fallbackAXRef: retryState?.axRef,
-            allowsTrackedIdentityReplacement: retryTrigger.allowsTrackedIdentityReplacement,
-            placementOrigin: placementOrigin,
-            createPlacementContext: createPlacementContext
+            placementOrigin: retryTrigger.placementOrigin,
+            retryTrigger: retryTrigger
         )
-        guard let candidate = preparedCreateCandidate(
-            from: outcome,
-            windowId: windowId,
-            trigger: retryTrigger
-        ) else {
-            return
-        }
-        if completeLiveStructuralReplacementCreate(candidate) {
-            return
-        }
-        if shouldDelayManagedReplacementCreate(candidate) {
-            enqueueManagedReplacementCreate(candidate)
-        } else {
-            trackPreparedCreate(candidate)
-        }
     }
 }

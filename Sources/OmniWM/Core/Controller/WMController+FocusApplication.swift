@@ -142,12 +142,9 @@ extension WMController {
         entry: WindowState,
         raisesWindow: Bool
     ) -> Bool {
-        let applied = performWindowFronting(
-            pid: entry.pid,
-            windowId: entry.windowId,
-            axRef: entry.axRef,
-            raisesWindow: raisesWindow
-        )
+        let applied = raisesWindow
+            ? performWindowFronting(pid: entry.pid, windowId: entry.windowId, axRef: entry.axRef)
+            : submitWindowFocus(pid: entry.pid, windowId: entry.windowId, axRef: entry.axRef)
         if applied, case .awaitingSameAppActivation = liveRequest.phase {
             _ = intentLedger.completeSameAppActivationHandoff(
                 requestId: liveRequest.requestId

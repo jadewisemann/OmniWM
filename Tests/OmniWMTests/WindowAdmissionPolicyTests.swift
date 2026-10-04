@@ -508,7 +508,7 @@ final class WindowAdmissionPolicyTests: XCTestCase {
         controller.axEventHandler.cancelCreatedWindowRetry(windowId: windowId)
     }
 
-    func testManualTilePromotionPreservesExistingFloatingWindowWhenFactsAreUnavailable() throws {
+    func testManualTilePromotionPreservesExistingFloatingWindowWhenFactsAreUnavailable() async throws {
         let controller = WindowAdmissionTestSupport.controller()
         let workspaceId = try XCTUnwrap(
             controller.workspaceManager.workspaceId(for: "1", createIfMissing: true)
@@ -542,6 +542,7 @@ final class WindowAdmissionPolicyTests: XCTestCase {
         XCTAssertNil(controller.workspaceManager.manualLayoutOverride(for: token))
         XCTAssertEqual(controller.workspaceManager.nativeFocusOwner, .managed(token))
         controller.axEventHandler.handleCGSEvent(.destroyed(windowId: UInt32(windowId), spaceId: 0))
+        await controller.axEventHandler.lifecycleQueries.task?.value
     }
 
     func testSingleToggleTileableFloatingDecisionTransitionsToTilingWithoutSecondInvocation() throws {

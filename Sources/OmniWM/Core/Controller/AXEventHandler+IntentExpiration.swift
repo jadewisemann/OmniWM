@@ -37,6 +37,10 @@ extension AXEventHandler {
             controller.focusPolicyEngine.handleLeaseDeadlineExpired(owner: owner, intentId: intentId)
 
         case let .sameAppCloseProbe(payload):
+            if hasPendingLifecycleDestruction(payload.focusedToken) {
+                lifecycleQueries.deferredCloseProbeExpiration = intentId
+                return
+            }
             if hasPendingSameAppCloseHandoff(payload.focusedToken) {
                 return
             }

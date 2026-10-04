@@ -29,7 +29,7 @@ extension WMController {
         monitor: Monitor,
         captureGeometry: Bool = true
     ) -> Bool {
-        let logicalOnly = workspaceManager.isAppHidden(pid: entry.pid)
+        let logicalOnly = workspaceManager.isWindowSuppressedByMacOS(entry.token)
             || isManagedWindowSuspendedForNativeFullscreen(entry.token)
         if logicalOnly {
             guard let hiddenState = logicalScratchpadHiddenState(for: entry, monitor: monitor) else {
@@ -57,7 +57,7 @@ extension WMController {
         )
         if !parked,
            workspaceManager.hiddenState(for: entry.token) == nil,
-           !workspaceManager.isAppHidden(pid: entry.pid),
+           !workspaceManager.isWindowSuppressedByMacOS(entry.token),
            !isManagedWindowSuspendedForNativeFullscreen(entry.token)
         {
             axManager.unsuppressFrameWrites([(entry.pid, entry.windowId)])
@@ -68,7 +68,8 @@ extension WMController {
     func hideScratchpadMembers(
         _ entries: [WindowState],
         fallbackMonitor: Monitor,
-        captureGeometry: Bool = true
+        captureGeometry: Bool = true,
+        focusOrigin: ManagedFocusOrigin = .keyboardOrProgrammatic
     ) {
         let focusedEntry = workspaceManager.selectedManagedToken.flatMap { focusedToken in
             entries.first { $0.token == focusedToken }
@@ -85,7 +86,8 @@ extension WMController {
             recoverFocusAfterScratchpadHide(
                 in: workspaceManager.workspace(for: focusedEntry.token) ?? focusedEntry.workspaceId,
                 excluding: Set(entries.map(\.token)),
-                on: (workspaceManager.monitor(for: focusedEntry.workspaceId) ?? fallbackMonitor).id
+                on: (workspaceManager.monitor(for: focusedEntry.workspaceId) ?? fallbackMonitor).id,
+                focusOrigin: focusOrigin
             )
         }
     }
@@ -149,7 +151,7 @@ extension WMController {
     func revealableScratchpadEntries(in index: ScratchpadIndex) -> [WindowState] {
         scratchpadEntries(in: index).filter { entry in
             !isManagedWindowSuspendedForNativeFullscreen(entry.token)
-                && !workspaceManager.isAppHidden(pid: entry.pid)
+                && !workspaceManager.isWindowSuppressedByMacOS(entry.token)
         }
     }
 
@@ -158,7 +160,8 @@ extension WMController {
         in index: ScratchpadIndex,
         on workspaceId: WorkspaceDescriptor.ID,
         monitor: Monitor,
-        preferring preferredToken: WindowToken? = nil
+        preferring preferredToken: WindowToken? = nil,
+        focusOrigin: ManagedFocusOrigin = .keyboardOrProgrammatic
     ) -> Bool {
         for entry in scratchpadEntries(in: index) where entry.workspaceId != workspaceId {
             reassignManagedWindow(entry.token, to: workspaceId)
@@ -189,7 +192,8 @@ extension WMController {
                 }
                 return
             }
-            self.scratchpadStacking.stackScratchpadMembers(survivors, in: index, on: workspaceId)
+            self.scratchpadStacking
+                .stackScratchpadMembers(survivors, in: index, on: workspaceId, focusOrigin: focusOrigin)
         }
 
         for entry in ordered where showScratchpadWindow(
@@ -210,13 +214,17 @@ extension WMController {
         return true
     }
 
-    func hideRevealedScratchpad(_ index: ScratchpadIndex, fallbackMonitor: Monitor) {
+    func hideRevealedScratchpad(
+        _ index: ScratchpadIndex,
+        fallbackMonitor: Monitor,
+        focusOrigin: ManagedFocusOrigin = .keyboardOrProgrammatic
+    ) {
         let entries = scratchpadEntries(in: index).filter { entry in
             workspaceManager.hiddenState(for: entry.token) == nil
-                || workspaceManager.isAppHidden(pid: entry.pid)
+                || workspaceManager.isWindowSuppressedByMacOS(entry.token)
                 || isManagedWindowSuspendedForNativeFullscreen(entry.token)
         }
-        hideScratchpadMembers(entries, fallbackMonitor: fallbackMonitor)
+        hideScratchpadMembers(entries, fallbackMonitor: fallbackMonitor, focusOrigin: focusOrigin)
         workspaceManager.setRevealedScratchpad(nil)
     }
 }

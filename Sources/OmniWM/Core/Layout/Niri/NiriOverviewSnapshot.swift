@@ -92,7 +92,7 @@ extension NiriLayoutEngine {
         context: NiriCalculationContext
     ) -> NiriOverviewColumnSnapshot {
         let rect = resolvedSingleWindowRect(
-            for: single, in: context.area.workingFrame,
+            for: single, in: context.area.singleWindowFrame,
             borderSafeFillFrame: context.area.borderSafeFillFrame,
             fullscreenLayoutFrame: context.area.fullscreenLayoutFrame,
             scale: context.area.scale, gaps: context.geometry.gaps, orientation: context.orientation

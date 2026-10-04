@@ -6,5 +6,6 @@ import Foundation
 enum AXWindowIntakeEvent: Sendable {
     case focusedWindowChanged(pid: pid_t, callbackGeneration: UInt64?)
     case windowDestroyed(pid: pid_t, axRef: AXWindowRef, callbackGeneration: UInt64?)
-    case windowMiniaturized(pid: pid_t, windowId: Int, callbackGeneration: UInt64?)
+    case windowMiniaturized(pid: pid_t, axRef: AXWindowRef, callbackGeneration: UInt64?)
+    case windowDeminiaturized(pid: pid_t, axRef: AXWindowRef, callbackGeneration: UInt64?)
 }

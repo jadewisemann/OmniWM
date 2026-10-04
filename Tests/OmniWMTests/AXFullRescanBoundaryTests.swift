@@ -123,7 +123,9 @@ final class AXFullRescanBoundaryTests: XCTestCase {
             Scenario(
                 name: "adopt existing",
                 ownsLifecycle: false,
-                addResults: [.notificationAlreadyRegistered, .notificationAlreadyRegistered],
+                addResults: [
+                    .notificationAlreadyRegistered, .notificationAlreadyRegistered, .notificationAlreadyRegistered
+                ],
                 hasSubscription: true,
                 newlyInstalled: [],
                 removed: []
@@ -147,7 +149,7 @@ final class AXFullRescanBoundaryTests: XCTestCase {
             Scenario(
                 name: "install exact refcon",
                 ownsLifecycle: false,
-                addResults: [.success, .success],
+                addResults: [.success, .success, .success],
                 hasSubscription: true,
                 newlyInstalled: .lifecycle,
                 removed: []
@@ -253,6 +255,7 @@ final class AXFullRescanBoundaryTests: XCTestCase {
         XCTAssertEqual(retried.subscription?.notifications, .lifecycle)
         XCTAssertEqual(registrations[.destroyed], newWindowId)
         XCTAssertEqual(registrations[.miniaturized], newWindowId)
+        XCTAssertEqual(registrations[.deminiaturized], newWindowId)
     }
 
     func testRebindStageRejectsCrossIdAlreadyRegisteredCallbacksWithoutDeletingOwner() throws {
@@ -300,6 +303,7 @@ final class AXFullRescanBoundaryTests: XCTestCase {
         XCTAssertTrue(second.pendingRemovals.isEmpty)
         XCTAssertEqual(registrations[.destroyed], firstWindowId)
         XCTAssertEqual(registrations[.miniaturized], firstWindowId)
+        XCTAssertEqual(registrations[.deminiaturized], firstWindowId)
         XCTAssertTrue(removed.isEmpty)
 
         guard let firstSubscription = first.subscription else {
@@ -323,6 +327,7 @@ final class AXFullRescanBoundaryTests: XCTestCase {
         XCTAssertEqual(retry.newlyInstalled, .lifecycle)
         XCTAssertEqual(registrations[.destroyed], secondWindowId)
         XCTAssertEqual(registrations[.miniaturized], secondWindowId)
+        XCTAssertEqual(registrations[.deminiaturized], secondWindowId)
     }
 
     func testRebindRetagRequiresExactSourceOwnerAndClearsSourceAlias() throws {
@@ -457,18 +462,18 @@ final class AXFullRescanBoundaryTests: XCTestCase {
             },
             checkCancellation: {
                 cancellationChecks += 1
-                if cancellationChecks == 3 { throw CancellationError() }
+                if cancellationChecks == 4 { throw CancellationError() }
             },
             recordPendingRemovals: { pendingDeliveries.append($0) }
         )) { error in
             XCTAssertTrue(error is CancellationError)
         }
 
-        XCTAssertEqual(cancellationChecks, 3)
-        XCTAssertEqual(added, [.destroyed, .miniaturized])
-        XCTAssertEqual(removed, [.miniaturized, .destroyed])
+        XCTAssertEqual(cancellationChecks, 4)
+        XCTAssertEqual(added, [.destroyed, .miniaturized, .deminiaturized])
+        XCTAssertEqual(removed, [.deminiaturized, .miniaturized, .destroyed])
         XCTAssertEqual(pendingDeliveries.count, 1)
-        XCTAssertEqual(pendingDeliveries.first?.map(\.notification), [.miniaturized, .destroyed])
+        XCTAssertEqual(pendingDeliveries.first?.map(\.notification), [.deminiaturized, .miniaturized, .destroyed])
         XCTAssertTrue(pendingDeliveries.first?.allSatisfy { CFEqual($0.element, element) } == true)
     }
 
@@ -546,7 +551,7 @@ final class AXFullRescanBoundaryTests: XCTestCase {
             } == true)
             XCTAssertNil(windows[orphanWindow.windowId])
             XCTAssertNil(subscriptions[orphanWindow.windowId])
-            XCTAssertEqual(pending.value.map(\.notification), [.miniaturized])
+            XCTAssertEqual(pending.value.map(\.notification), [.miniaturized, .deminiaturized])
             XCTAssertTrue(pending.value.allSatisfy {
                 CFEqual($0.element, orphanWindow.element)
             })
@@ -2465,6 +2470,51 @@ final class AXFullRescanBoundaryTests: XCTestCase {
         XCTAssertEqual(refresh.performanceSnapshot()?.refreshesCompleted, 0)
         XCTAssertEqual(controller.workspaceManager.workspace(for: token), destination)
         XCTAssertNotNil(controller.workspaceManager.entry(for: token))
+        XCTAssertFalse(refresh.layoutState.didExecuteEffectPlan)
+    }
+
+    func testDeferredFullRescanCannotApplyAfterWindowIsMinimized() async throws {
+        let controller = WindowAdmissionTestSupport.controller()
+        let manager = controller.workspaceManager
+        let workspaceId = try XCTUnwrap(manager.workspaceId(for: "1", createIfMissing: true))
+        let token = WindowToken(pid: 2_147_483_496, windowId: 72_398)
+        manager.addWindow(
+            WindowAdmissionTestSupport.axRef(for: token),
+            pid: token.pid,
+            windowId: token.windowId,
+            to: workspaceId
+        )
+        let refresh = controller.layoutRefreshController
+        defer {
+            refresh.resetState()
+            controller.axManager.cleanup()
+        }
+        let entered = expectation(description: "Inventory read awaiting result")
+        let gate = AXBoundaryAsyncGate()
+        controller.axManager.fullRescanWindowInfoProvider = { ids in
+            entered.fulfill()
+            await gate.wait()
+            return Dictionary(uniqueKeysWithValues: ids.map {
+                ($0, WindowServerInfo(id: $0, pid: token.pid, level: 0, frame: .zero))
+            })
+        }
+        refresh.beginPerformanceCapture()
+        refresh.layoutState.pendingRefresh = .init(
+            kind: .fullRescan,
+            reason: .appLaunched,
+            rescanScope: .targeted(appPIDs: [token.pid], nativeSpaceIds: [])
+        )
+        refresh.startNextRefreshIfNeeded()
+        await fulfillment(of: [entered], timeout: 1)
+        let active = try XCTUnwrap(refresh.layoutState.activeRefreshTask)
+        refresh.layoutState.inventoryStabilityHoldFullRescans = true
+        controller.axEventHandler.updateWindowMinimizedState(true, token: token, requestRefresh: false)
+        await gate.releaseAll()
+        await active.value
+
+        XCTAssertEqual(refresh.performanceSnapshot()?.refreshesIncomplete, 1)
+        XCTAssertEqual(refresh.performanceSnapshot()?.refreshesCompleted, 0)
+        XCTAssertTrue(try XCTUnwrap(manager.entry(for: token)).observedState.isMinimized)
         XCTAssertFalse(refresh.layoutState.didExecuteEffectPlan)
     }
 }

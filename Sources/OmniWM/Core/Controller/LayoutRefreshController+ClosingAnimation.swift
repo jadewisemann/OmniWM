@@ -9,7 +9,7 @@ extension LayoutRefreshController {
     func startWindowCloseAnimation(entry: WindowState, monitor: Monitor) {
         guard controller?.motionPolicy.animationsEnabled != false else { return }
         guard let controller else { return }
-        guard !controller.workspaceManager.isAppHidden(entry.token) else { return }
+        guard !controller.workspaceManager.isWindowSuppressedByMacOS(entry.token) else { return }
         guard let frame = fastFrame(for: entry.token, axRef: entry.axRef) else { return }
 
         let displacement = CGPoint(x: 0, y: -12)
@@ -85,7 +85,10 @@ extension LayoutRefreshController {
         targets.reserveCapacity(animations.count)
 
         for (windowId, animation) in animations {
-            if controller?.workspaceManager.isAppHidden(pid: animation.pid) == true {
+            if controller?.workspaceManager.isWindowSuppressedByMacOS(WindowToken(
+                pid: animation.pid,
+                windowId: windowId
+            )) == true {
                 completedWindowIds.append(windowId)
                 continue
             }

@@ -151,7 +151,7 @@ final class WorldStore {
     }
 
     private func applyWindowMutationBeforePlan(_ event: WMEvent, monitors: [Monitor]) {
-        switch ReconcileEventDomain.domain(for: event) {
+        switch event.reconcileDomain {
         case .window:
             applyWindowEventBeforePlan(event, monitors: monitors)
         case .session:
@@ -197,6 +197,12 @@ final class WorldStore {
 
         case .hiddenApplicationsChanged:
             applyHiddenApplications(event)
+
+        case let .windowMinimizedChanged(token, workspaceId, minimized, _):
+            guard var state = windows.entry(for: token)?.observedState else { return }
+            state.isMinimized = minimized
+            model.setObservedState(state, for: token)
+            refreshProjectionExclusions(in: [workspaceId])
 
         case let .appVisibilityInvalidated(pid, _, _):
             appVisibilityGenerationByPID[pid, default: 0] &+= 1

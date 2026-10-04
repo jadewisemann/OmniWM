@@ -68,7 +68,7 @@ extension Thread {
         return job
     }
 
-    func runInLoop<T: Sendable>(
+    nonisolated(nonsending) func runInLoop<T: Sendable>(
         timeout: Duration = .seconds(2),
         onUndeliveredSuccess: @Sendable @escaping (T) -> Void = { _ in },
         _ body: @Sendable @escaping (RunLoopJob) throws -> T
@@ -84,7 +84,7 @@ extension Thread {
                     return
                 }
 
-                let timeoutTask = Task {
+                let timeoutTask = Task.detached(priority: Task.currentPriority) {
                     do {
                         try await Task.sleep(for: timeout)
                     } catch {

@@ -91,14 +91,14 @@ final class DwindleWindowCloseFocusRecoveryTests: XCTestCase {
                 controller.factResolver.factProvider = nil
                 controller.factResolver.deferredFactProvider = { _ in await gate.wait() }
 
-                if order == .destroyThenFocus { Self.closeFocusedWindow(in: fixture) }
+                if order == .destroyThenFocus { await Self.closeFocusedWindow(in: fixture) }
                 XCTAssertTrue(
                     controller.axEventHandler.handleAppActivation(
                         pid: fixture.closingToken.pid,
                         source: .focusedWindowChanged
                     )
                 )
-                if order == .focusThenDestroy { Self.closeFocusedWindow(in: fixture) }
+                if order == .focusThenDestroy { await Self.closeFocusedWindow(in: fixture) }
                 Self.assertPendingCloseStaysLocal(fixture)
                 await Self.settleClose(fixture)
                 Self.assertRecoveredLocally(fixture)
@@ -149,9 +149,9 @@ final class DwindleWindowCloseFocusRecoveryTests: XCTestCase {
         for order in FocusOrder.allCases {
             let fixture = try makeFixture(layouts: layouts)
             defer { stop(fixture) }
-            if order == .destroyThenFocus { closeFocusedWindow(in: fixture) }
+            if order == .destroyThenFocus { await closeFocusedWindow(in: fixture) }
             let probeId = try observeRemoteFocus(in: fixture)
-            if order == .focusThenDestroy { closeFocusedWindow(in: fixture) }
+            if order == .focusThenDestroy { await closeFocusedWindow(in: fixture) }
             assertPendingCloseStaysLocal(fixture)
 
             expireProbe(probeId, in: fixture)
@@ -168,7 +168,7 @@ final class DwindleWindowCloseFocusRecoveryTests: XCTestCase {
             let fixture = try makeFixture(layouts: layouts)
             defer { stop(fixture) }
             let controller = fixture.controller
-            closeFocusedWindow(in: fixture)
+            await closeFocusedWindow(in: fixture)
             switch bypass {
             case .mouse:
                 controller.axEventHandler.noteMouseFocusIntent(token: fixture.remoteToken)
@@ -325,10 +325,11 @@ final class DwindleWindowCloseFocusRecoveryTests: XCTestCase {
         return try XCTUnwrap(fixture.controller.intentLedger.openSameAppCloseProbe()?.intent.id)
     }
 
-    private static func closeFocusedWindow(in fixture: Fixture) {
+    private static func closeFocusedWindow(in fixture: Fixture) async {
         fixture.controller.axEventHandler.handleCGSEvent(
             .closed(windowId: UInt32(fixture.closingToken.windowId))
         )
+        await fixture.controller.axEventHandler.lifecycleQueries.task?.value
     }
 
     private static func expireProbe(_ probeId: IntentID, in fixture: Fixture) {

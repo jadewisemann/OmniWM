@@ -8,7 +8,7 @@ import OmniWMIPC
 extension WMController {
     func isManagedWindowDisplayable(_ token: WindowToken) -> Bool {
         guard workspaceManager.entry(for: token) != nil else { return false }
-        if isManagedWindowSuppressedByMacOSHide(token) {
+        if isManagedWindowSuppressedByMacOS(token) {
             return false
         }
         if workspaceManager.layoutReason(for: token) != .standard {
@@ -17,8 +17,8 @@ extension WMController {
         return !workspaceManager.isHiddenInCorner(token)
     }
 
-    func isManagedWindowSuppressedByMacOSHide(_ token: WindowToken) -> Bool {
-        workspaceManager.isAppHidden(token)
+    func isManagedWindowSuppressedByMacOS(_ token: WindowToken) -> Bool {
+        workspaceManager.isWindowSuppressedByMacOS(token)
     }
 
     func isManagedWindowSuspendedForNativeFullscreen(_ token: WindowToken) -> Bool {
@@ -118,7 +118,7 @@ extension WMController {
         let token = focusedOrFrontmostWindowTokenForAutomation()
         guard let token,
               workspaceManager.entry(for: token) != nil,
-              !workspaceManager.isAppHidden(token)
+              !workspaceManager.isWindowSuppressedByMacOS(token)
         else {
             return nil
         }

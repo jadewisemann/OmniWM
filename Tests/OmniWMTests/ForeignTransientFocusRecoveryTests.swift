@@ -111,7 +111,7 @@ final class ForeignTransientFocusRecoveryTests: XCTestCase {
         assertNoAutomaticRecovery(fixture)
     }
 
-    func testClosingExternalTargetClearsExactIdentityWithoutRecovery() throws {
+    func testClosingExternalTargetClearsExactIdentityWithoutRecovery() async throws {
         let fixture = try makeFixture(prefix: "OmniWMForeignTransientProvisionalCloseTests")
         let popupToken = WindowToken(pid: 559_003, windowId: 559_203)
 
@@ -124,13 +124,14 @@ final class ForeignTransientFocusRecoveryTests: XCTestCase {
         fixture.controller.axEventHandler.handleCGSEvent(
             .closed(windowId: UInt32(popupToken.windowId))
         )
+        await fixture.controller.axEventHandler.lifecycleQueries.task?.value
 
         XCTAssertTrue(fixture.controller.workspaceManager.nativeFocusOwner.isExternal)
         XCTAssertNil(fixture.controller.workspaceManager.externalFocusToken)
         assertNoAutomaticRecovery(fixture)
     }
 
-    func testClosingOlderOverlappingTargetPreservesCurrentTargetSuppression() throws {
+    func testClosingOlderOverlappingTargetPreservesCurrentTargetSuppression() async throws {
         let fixture = try makeFixture(prefix: "OmniWMForeignTransientOverlappingTargetTests")
         let olderPopupToken = WindowToken(pid: 559_005, windowId: 559_205)
         let currentPopupToken = WindowToken(pid: 559_005, windowId: 559_206)
@@ -150,6 +151,7 @@ final class ForeignTransientFocusRecoveryTests: XCTestCase {
         fixture.controller.axEventHandler.handleCGSEvent(
             .closed(windowId: UInt32(olderPopupToken.windowId))
         )
+        await fixture.controller.axEventHandler.lifecycleQueries.task?.value
         fixture.controller.ensureFocusedTokenValid(in: fixture.workspaceId)
 
         XCTAssertTrue(fixture.controller.workspaceManager.nativeFocusOwner.isExternal)

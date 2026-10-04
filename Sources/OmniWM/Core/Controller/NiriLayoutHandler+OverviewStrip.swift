@@ -22,7 +22,8 @@ extension NiriLayoutHandler {
               )
         else { return nil }
         let area = WorkingAreaContext(
-            workingFrame: snapshot.monitor.workingFrame,
+            workingFrame: snapshot.niriWorkingFrame,
+            singleWindowFrame: snapshot.monitor.workingFrame,
             borderSafeFillFrame: snapshot.monitor.borderSafeFillFrame,
             fullscreenLayoutFrame: snapshot.monitor.fullscreenLayoutFrame,
             viewFrame: snapshot.monitor.frame,

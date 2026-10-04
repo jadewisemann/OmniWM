@@ -53,11 +53,14 @@ extension AXWindowService {
         let components = options.components
         let verify = options.verify
         precondition(!components.isEmpty)
+        var currentFrame = currentFrameHint
+        if components == .all, currentFrame == nil {
+            let start = timing == nil ? 0 : DispatchTime.now().uptimeNanoseconds
+            currentFrame = try? self.frame(window)
+            if let timing { timing.pointee.preReadNs = elapsedNanoseconds(since: start) }
+        }
         let writeOrder = components == .all
-            ? frameWriteOrder(
-                currentFrame: currentFrameHint ?? (try? self.frame(window)),
-                targetFrame: frame
-            )
+            ? frameWriteOrder(currentFrame: currentFrame, targetFrame: frame)
             : .sizeThenPosition
         let axFrame = convertToAX(frame)
         var position = CGPoint(x: axFrame.origin.x, y: axFrame.origin.y)

@@ -11,7 +11,11 @@ struct TraceCaptureResources {
         NativeFullscreenPlaceholderTrace.motion,
         WindowAdmissionTrace.shared,
         AnimationTickTrace.shared,
+        EventIntakeTrace.shared,
         MainThreadAXSpanTrace.shared,
+        WindowFocusDispatchTrace.shared,
+        WindowFocusDispatchTrace.retryRaise,
+        MainRunLoopActivityTrace.shared,
         RawAXNotificationTrace.shared,
         FrameApplyTrace.shared,
         NiriLayoutTrace.shared,
@@ -48,11 +52,13 @@ struct TraceCaptureResources {
             recorders.forEach { $0.beginCapture() }
             FrameEffectTraceContext.beginCapture(generation: generation)
             FrameEffectObservationTracker.shared.beginCapture(generation: generation)
+            MainRunLoopActivityTrace.beginCapture()
         }
     }
 
     func end(for profile: TraceCaptureProfile) {
         if profile == .problem {
+            MainRunLoopActivityTrace.endCapture()
             FrameEffectObservationTracker.shared.endCapture()
             FrameEffectTraceContext.endCapture()
             diagnosticsEventRecorder.endVerboseCapture()

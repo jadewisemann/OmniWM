@@ -5,14 +5,20 @@ import AppKit
 import SwiftUI
 
 @MainActor
-struct WorkspaceBarIslandPanel {
+final class WorkspaceBarIslandPanel {
     let panel: WorkspaceBarPanel
     let hostingView: NSHostingView<WorkspaceBarView>
+    let interaction: WorkspaceBarIslandInteraction
     var slice: WorkspaceBarIslandSlice
     var showsSystemStatsButton: Bool
     var lastAppliedFrame: NSRect?
 
-    init(panel: WorkspaceBarPanel, rootView: WorkspaceBarView, resolved: ResolvedBarSettings) {
+    init(
+        panel: WorkspaceBarPanel,
+        rootView: WorkspaceBarView,
+        interaction: WorkspaceBarIslandInteraction = WorkspaceBarIslandInteraction(),
+        resolved: ResolvedBarSettings
+    ) {
         let hostingView = NSHostingView(rootView: rootView)
         hostingView.sizingOptions = []
         panel.contentView = hostingView
@@ -21,6 +27,7 @@ struct WorkspaceBarIslandPanel {
         hostingView.appearance = appearance
         self.panel = panel
         self.hostingView = hostingView
+        self.interaction = interaction
         slice = rootView.slice
         showsSystemStatsButton = rootView.showsSystemStatsButton
         lastAppliedFrame = nil
@@ -37,7 +44,7 @@ struct WorkspaceBarIslandPanel {
             : resolved.windowLevel.nsWindowLevel
     }
 
-    mutating func applyFrame(
+    func applyFrame(
         _ frame: NSRect,
         using frameApplier: (WorkspaceBarPanel, NSRect) -> Void
     ) {

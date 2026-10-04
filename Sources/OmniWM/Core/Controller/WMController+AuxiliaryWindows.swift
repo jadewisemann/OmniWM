@@ -29,11 +29,11 @@ extension WMController {
             ?? monitors.first(where: \.isMain) ?? monitors.first
         else { return nil }
         let resolved = settings.workspaceBar.resolved(for: monitor)
+        let attachment = isWorkspaceBarVisible(on: monitor, resolved: resolved)
+            ? workspaceBarManager.popupAttachment(on: monitor.id) : nil
         return HiddenBarPanelPlacement(
-            anchor: HiddenBarPanelController.panelAnchor(
-                monitor: monitor,
-                resolved: resolved,
-                barVisible: isWorkspaceBarVisible(on: monitor, resolved: resolved)
+            attachment: attachment ?? PopupAttachment(
+                anchor: CGPoint(x: monitor.frame.midX, y: monitor.visibleFrame.maxY)
             ),
             visibleFrame: monitor.visibleFrame
         )
@@ -47,7 +47,8 @@ extension WMController {
                 frame: HiddenBarFallbackIconController.iconFrame(
                     monitor: monitor,
                     barVisible: isWorkspaceBarVisible(on: monitor, resolved: resolved),
-                    barFrame: workspaceBarManager.primaryBarFrame(on: monitor.id)
+                    barFrame: workspaceBarManager.primaryBarFrame(on: monitor.id),
+                    position: resolved.position
                 )
             )
         }
@@ -75,6 +76,7 @@ extension WMController {
         } else {
             quakeTerminalController.cleanup()
         }
+        updateHotkeyBindings(settings.hotkeyBindings)
     }
 
     func toggleQuakeTerminal() {
@@ -112,15 +114,24 @@ extension WMController {
 
     func toggleSystemStatsFromBar(on monitorId: Monitor.ID) {
         guard let monitor = workspaceManager.monitors.first(where: { $0.id == monitorId }),
-              let anchor = workspaceBarManager.statsAnchor(on: monitorId)
+              let attachment = workspaceBarManager.popupAttachment(on: monitorId, forStats: true)
         else {
             return
         }
         systemStatsPopupController.toggle(
-            anchor: anchor,
+            attachment: attachment,
             monitorId: monitorId,
             screenVisibleFrame: monitor.visibleFrame
         )
+    }
+
+    func statusMenuEdge(from anchor: NSView) -> PopupAttachment.Edge {
+        guard anchor is HiddenBarFallbackIconButton,
+              let monitor = workspaceManager.monitors
+              .first(where: { $0.displayId == anchor.window?.screen?.displayId }),
+              isWorkspaceBarVisible(on: monitor)
+        else { return .below }
+        return workspaceBarManager.popupAttachment(on: monitor.id)?.edge ?? .below
     }
 
     func dismissSystemStatsPopup(anchoredTo monitorId: Monitor.ID) {
@@ -140,16 +151,24 @@ extension WMController {
         syncClipboardHistoryService()
     }
 
-    func copyClipboardItem(id: UUID) async -> Bool {
-        await clipboardHistoryService.copyItemToPasteboard(id: id)
+    func copyClipboardItem(id: UUID, plainText: Bool = false) async -> Bool {
+        await clipboardHistoryService.copyItemToPasteboard(id: id, plainText: plainText)
+    }
+
+    func clipboardItemPreview(id: UUID) async -> ClipboardPalettePreview? {
+        await clipboardHistoryService.preview(id: id)
+    }
+
+    func setClipboardItemPinned(_ pinned: Bool, id: UUID) async -> [ClipboardPaletteItem] {
+        await clipboardHistoryService.setPinned(pinned, id: id)
     }
 
     func deleteClipboardItem(id: UUID) async -> [ClipboardPaletteItem] {
         await clipboardHistoryService.deleteItem(id: id)
     }
 
-    func clearClipboardHistory() async -> [ClipboardPaletteItem] {
-        await clipboardHistoryService.clearHistory()
+    func clearClipboardHistory() async throws -> [ClipboardPaletteItem] {
+        try await clipboardHistoryService.clearHistory()
     }
 
     func syncClipboardHistoryService() {
@@ -164,7 +183,8 @@ extension WMController {
         windowActionHandler.openMenuAnywhere()
     }
 
-    func navigateToCommandPaletteWindow(_ handle: WindowHandle) {
+    @discardableResult
+    func navigateToCommandPaletteWindow(_ handle: WindowHandle) -> Bool {
         windowActionHandler.navigateToExplicitlySelectedWindow(handle: handle)
     }
 
@@ -182,6 +202,16 @@ extension WMController {
 
     func toggleOverview() {
         windowActionHandler.toggleOverview()
+    }
+
+    func setOverviewEnabled(_ enabled: Bool) {
+        if settings.overview.enabled != enabled {
+            settings.overview.enabled = enabled
+        }
+        if !enabled {
+            windowActionHandlerStorage?.releaseOverviewController()
+        }
+        updateHotkeyBindings(settings.hotkeyBindings)
     }
 
     func handleOverviewHotkey(_ invocation: HotkeyInvocation) -> OverviewHotkeyDisposition {

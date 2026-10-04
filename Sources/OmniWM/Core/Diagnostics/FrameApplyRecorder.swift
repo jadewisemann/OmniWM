@@ -29,13 +29,14 @@ enum FrameApplyTrace {
         let observed: CGRect?
         let confirmed: CGRect?
         let eventUptimeNs: UInt64
+        let readStartedNs: UInt64
     }
 
     static let shared = SessionTraceRecorder<Record>(
         sectionTitle: "Frame Apply Trace",
         capacity: 65_536
     ) { record in
-        "scope=ax-ordinary+ax-park closing=excluded skylight-position=excluded"
+        "scope=ax-ordinary+ax-park closing=excluded skylight-position=park-submission+audit"
             + " t_ns=\(record.uptimeNs) trace=\(record.requestTraceId) effect=\(record.effectId)"
             + " origin=\(record.effectKind.traceDescription) display=\(record.displayId)"
             + " parent=\(record.parentTraceId) related=\(record.relatedTraceId)"
@@ -47,7 +48,7 @@ enum FrameApplyTrace {
             + " hint=\(TraceFormat.rect(record.hint))"
             + " observed=\(TraceFormat.rect(record.observed))"
             + " confirmed=\(TraceFormat.rect(record.confirmed))"
-            + " cgs_t_ns=\(record.eventUptimeNs)"
+            + " cgs_t_ns=\(record.eventUptimeNs) read_start_ns=\(record.readStartedNs)"
     }
 
     static func recordResult(_ result: AXFrameApplyResult, lane: AppAXFrameLane = .ordinary) {
@@ -112,7 +113,8 @@ enum FrameApplyTrace {
         drainId: UInt64 = 0,
         attempt: UInt8 = 0,
         eventUptimeNs: UInt64 = 0,
-        uptimeNs: UInt64 = 0
+        uptimeNs: UInt64 = 0,
+        readStartedNs: UInt64 = 0
     ) {
         guard shared.isActive else { return }
         let currentTraceRequestId = FrameEffectTraceContext.currentCaptureIdentifier(traceRequestId)
@@ -146,7 +148,8 @@ enum FrameApplyTrace {
                 hint: hint,
                 observed: observed,
                 confirmed: confirmed,
-                eventUptimeNs: eventUptimeNs
+                eventUptimeNs: eventUptimeNs,
+                readStartedNs: readStartedNs
             )
         )
     }

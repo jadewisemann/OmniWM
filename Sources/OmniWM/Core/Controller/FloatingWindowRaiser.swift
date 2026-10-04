@@ -94,7 +94,7 @@ final class FloatingWindowRaiser {
             }
             .filter { entry in
                 entry.layoutReason == .standard
-                    && !controller.workspaceManager.isAppHidden(pid: entry.pid)
+                    && !controller.workspaceManager.isWindowSuppressedByMacOS(entry.token)
                     && !controller.workspaceManager.isHiddenInCorner(entry.token)
             }
             .map(RaisableSurface.managed)

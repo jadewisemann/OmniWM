@@ -24,11 +24,20 @@ final class SettingsStore {
     private let autosaveEnabled: Bool
     private var isApplyingExport = false
     private var isApplyingRuntimeState = false
+    @ObservationIgnored private var lastEffectiveTrackpadAvailability: Bool?
+
+    var effectiveTrackpadGesturesEnabled: Bool {
+        gestures.scrollEnabled || gestures.workspaceSwipeEnabled ||
+            (gestures.overviewGestureEnabled && overview.enabled) ||
+            gestures.windowMoveEnabled || gestures.windowResizeEnabled
+    }
 
     var onIPCEnabledChanged: (@MainActor (Bool) -> Void)?
     var onExternalSettingsReloaded: (@MainActor () -> Void)?
     var onConfigNoticeChanged: (@MainActor () -> Void)?
     var onTrackpadGestureAvailabilityChanged: (@MainActor (Bool) -> Void)?
+    var onWorkspaceHotkeysChanged: (@MainActor () -> Void)?
+    var liveWorkspaceNamesForHotkeys: (@MainActor () -> [String])?
     private(set) var configNotice: SettingsConfigNotice?
 
     var hotkeysEnabled = SettingsStore.defaultExport.hotkeysEnabled {
@@ -125,7 +134,46 @@ final class SettingsStore {
         didSet { runtimeState.commandPaletteLastMode = commandPaletteLastMode }
     }
 
+    var commandPaletteApplicationsViewStyle: LauncherViewStyle {
+        get { runtimeState.commandPaletteViewStyle(for: .applications) }
+        set { runtimeState.setCommandPaletteViewStyle(newValue, for: .applications) }
+    }
+
+    var commandPaletteFilesViewStyle: LauncherViewStyle {
+        get { runtimeState.commandPaletteViewStyle(for: .files) }
+        set { runtimeState.setCommandPaletteViewStyle(newValue, for: .files) }
+    }
+
+    func recordLauncherLaunch(targetID: String, query: String, displayName: String? = nil) {
+        runtimeState.recordLauncherLaunch(
+            targetID: targetID,
+            displayName: displayName ?? URL(fileURLWithPath: targetID).lastPathComponent,
+            query: query
+        )
+    }
+
+    func launcherShortcutTarget(for query: String) -> String? {
+        runtimeState.launcherShortcutTarget(for: query)
+    }
+
+    func launcherLaunches(for targetID: String) -> [LauncherLaunch] {
+        runtimeState.launcherLaunches(for: targetID)
+    }
+
+    var launcherLaunchesSnapshot: [String: [LauncherLaunch]] {
+        runtimeState.launcherLaunchesSnapshot
+    }
+
+    var launcherHiddenSuggestions: Set<String> {
+        get { runtimeState.launcherHiddenSuggestions }
+        set { runtimeState.launcherHiddenSuggestions = newValue }
+    }
+
     var animationsEnabled = SettingsStore.defaultExport.animationsEnabled {
+        didSet { scheduleSave() }
+    }
+
+    var language = SettingsStore.defaultExport.language {
         didSet { scheduleSave() }
     }
 
@@ -218,19 +266,22 @@ final class SettingsStore {
         gaps.onChange = { [weak self] in self?.scheduleSave() }
         niri.onChange = { [weak self] in self?.scheduleSave() }
         dwindle.onChange = { [weak self] in self?.scheduleSave() }
-        gestures.onChange = { [weak self] in self?.scheduleSave() }
+        gestures.onChange = { [weak self] in
+            self?.notifyTrackpadAvailabilityIfChanged()
+            self?.scheduleSave()
+        }
         workspaceBar.onChange = { [weak self] in self?.scheduleSave() }
-        workspaces.onChange = { [weak self] in self?.scheduleSave() }
+        workspaces.onChange = { [weak self] in self?.workspacesDidChange() }
         borders.onChange = { [weak self] in self?.scheduleSave() }
-        overview.onChange = { [weak self] in self?.scheduleSave() }
+        overview.onChange = { [weak self] in
+            self?.notifyTrackpadAvailabilityIfChanged()
+            self?.scheduleSave()
+        }
         statusBar.onChange = { [weak self] in self?.scheduleSave() }
         hiddenBar.onChange = { [weak self] in self?.scheduleSave() }
         clipboard.onChange = { [weak self] in self?.scheduleSave() }
         quakeTerminal.onChange = { [weak self] in self?.scheduleSave() }
-        gestures.onAvailabilityChanged = { [weak self] available in
-            guard let self, !self.isApplyingExport else { return }
-            self.onTrackpadGestureAvailabilityChanged?(available)
-        }
+        lastEffectiveTrackpadAvailability = effectiveTrackpadGesturesEnabled
 
         let outcome = persistence.loadOutcome()
         transitionConfigNotice(to: outcome.notice)
@@ -347,6 +398,7 @@ extension SettingsStore {
             statusBar: statusBar.export(),
             hiddenBar: hiddenBar.export(),
             animationsEnabled: animationsEnabled,
+            language: language,
             clipboard: clipboard.export(),
             quakeTerminal: quakeTerminal.export(),
             appearanceMode: appearanceMode,
@@ -356,11 +408,12 @@ extension SettingsStore {
 
     func applyExport(_ export: SettingsExport) {
         let baseline = SettingsStore.defaultExport
-        let trackpadGesturesWereAvailable = gestures.trackpadGesturesEnabled
+        let trackpadGesturesWereAvailable = effectiveTrackpadGesturesEnabled
         isApplyingExport = true
         defer {
             isApplyingExport = false
-            let trackpadGesturesAreAvailable = gestures.trackpadGesturesEnabled
+            let trackpadGesturesAreAvailable = effectiveTrackpadGesturesEnabled
+            lastEffectiveTrackpadAvailability = trackpadGesturesAreAvailable
             if trackpadGesturesWereAvailable != trackpadGesturesAreAvailable {
                 onTrackpadGestureAvailabilityChanged?(trackpadGesturesAreAvailable)
             }
@@ -387,7 +440,7 @@ extension SettingsStore {
 
         hyperKeyModifiersStorage = export.hyperKeyModifiers
         KeySymbolMapper.setHyperKeyModifiers(export.hyperKeyModifiers)
-        hotkeyBindings = export.hotkeyBindings
+        hotkeyBindings = withWorkspaceNumberHotkeys(export.hotkeyBindings)
         systemHyperTrigger = export.systemHyperTrigger
 
         workspaceBar.applyIdentity(export.workspaceBar)
@@ -409,6 +462,7 @@ extension SettingsStore {
         statusBar.apply(export.statusBar)
         hiddenBar.apply(export.hiddenBar)
         animationsEnabled = export.animationsEnabled
+        language = export.language
         clipboard.apply(export.clipboard)
 
         quakeTerminal.apply(export.quakeTerminal, baseline: baseline.quakeTerminal)
@@ -416,13 +470,51 @@ extension SettingsStore {
         appearanceMode = export.appearanceMode
         tabRailAppIcons = export.tabRailAppIcons
     }
+
+    private func notifyTrackpadAvailabilityIfChanged() {
+        guard !isApplyingExport else { return }
+        let available = effectiveTrackpadGesturesEnabled
+        guard available != lastEffectiveTrackpadAvailability else { return }
+        lastEffectiveTrackpadAvailability = available
+        onTrackpadGestureAvailabilityChanged?(available)
+    }
 }
 
 extension SettingsStore {
+    func isCommandFeatureEnabled(_ command: HotkeyCommand) -> Bool {
+        switch command {
+        case .presentation(.overview): overview.enabled
+        case .presentation(.quakeTerminal): quakeTerminal.enabled
+        default: true
+        }
+    }
+
     func resetHotkeysToDefaults() {
         hyperKeyModifiers = SettingsStore.defaultExport.hyperKeyModifiers
-        hotkeyBindings = HotkeyBindingRegistry.defaults()
+        hotkeyBindings = withWorkspaceNumberHotkeys(HotkeyBindingRegistry.defaults())
         systemHyperTrigger = SettingsStore.defaultExport.systemHyperTrigger
+    }
+
+    private func withWorkspaceNumberHotkeys(_ bindings: [HotkeyBinding]) -> [HotkeyBinding] {
+        HotkeyBindingRegistry.reconcilingWorkspaceNumberBindings(
+            bindings,
+            workspaceNames: workspaces.configuredNames() + (liveWorkspaceNamesForHotkeys?() ?? [])
+        )
+    }
+
+    private func workspacesDidChange() {
+        reconcileWorkspaceNumberHotkeys()
+        scheduleSave()
+    }
+
+    func reconcileWorkspaceNumberHotkeys() {
+        let reconciled = withWorkspaceNumberHotkeys(hotkeyBindings)
+        if reconciled != hotkeyBindings {
+            hotkeyBindings = reconciled
+            if !isApplyingExport {
+                onWorkspaceHotkeysChanged?()
+            }
+        }
     }
 
     func updateBinding(for commandId: String, newBinding: KeyBinding) {
@@ -443,7 +535,7 @@ extension SettingsStore {
     }
 
     func resetBindings(for commandId: String) {
-        guard let defaultBinding = HotkeyBindingRegistry.defaults().first(where: { $0.id == commandId }),
+        guard let defaultBinding = HotkeyBindingRegistry.defaultBinding(for: commandId),
               let index = hotkeyBindings.firstIndex(where: { $0.id == commandId })
         else { return }
         hotkeyBindings[index] = defaultBinding

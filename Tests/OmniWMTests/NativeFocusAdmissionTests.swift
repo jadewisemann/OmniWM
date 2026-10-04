@@ -8,6 +8,33 @@ import XCTest
 
 @MainActor
 final class NativeFocusAdmissionTests: XCTestCase {
+    func testMinimizedCreateAdmissionDoesNotAdoptOrRecheckNativeFocus() throws {
+        let operations = FocusOperationRecorder()
+        let controller = Self.controller(operations: operations)
+        defer { Self.stopFocusObservation(controller) }
+        let manager = controller.workspaceManager
+        let workspaceId = try XCTUnwrap(manager.workspaceId(for: "1", createIfMissing: true))
+        let token = WindowToken(pid: 510_591, windowId: 510_592)
+        Self.startUnresolvedFocusObservation(controller, pid: token.pid)
+        var focusReads = 0
+        controller.factResolver.factProvider = { _ in
+            focusReads += 1
+            return Self.focusedFact(for: token)
+        }
+        var candidate = Self.preparedCreate(token: token, workspaceId: workspaceId)
+        candidate.isMinimized = true
+
+        controller.axEventHandler.trackPreparedCreate(candidate)
+        controller.eventIntake.drainNow()
+
+        XCTAssertTrue(try XCTUnwrap(manager.entry(for: token)).observedState.isMinimized)
+        XCTAssertNil(manager.nativeManagedFocusToken)
+        XCTAssertNil(manager.pendingFocusedToken)
+        XCTAssertNil(manager.borderFocusToken)
+        XCTAssertEqual(focusReads, 0)
+        XCTAssertTrue(operations.values.isEmpty)
+    }
+
     func testCreateAdmissionRechecksExactFocusBeforeTwoWindowRelayout() async throws {
         for focusedIndex in 0 ... 1 {
             let operations = FocusOperationRecorder()

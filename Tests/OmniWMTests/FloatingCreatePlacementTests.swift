@@ -1191,7 +1191,7 @@ final class FloatingCreatePlacementTests: XCTestCase {
         )
     }
 
-    func testFrameChangeRetryKeepsCapturedInactivePlacementWhenAdmissionCompletes() throws {
+    func testFrameChangeRetryKeepsCapturedInactivePlacementWhenAdmissionCompletes() async throws {
         let fixture = try makeTwoMonitorFixture()
         let sourceFrame = CGRect(x: 120, y: 120, width: 640, height: 480)
         let windowId: UInt32 = 614
@@ -1220,29 +1220,33 @@ final class FloatingCreatePlacementTests: XCTestCase {
             task: nil
         )
 
-        var admitted = false
-        controller.axEventHandler.windowInfoProvider = { [weak controller] queriedWindowId in
-            guard let controller, queriedWindowId == windowId else { return nil }
-            if !admitted {
-                admitted = true
-                controller.workspaceManager.addWindow(
-                    axRef,
-                    pid: token.pid,
-                    windowId: token.windowId,
-                    to: destinationWorkspace,
-                    mode: .floating
-                )
-            }
-            return WindowServerInfo(
-                id: windowId,
-                pid: token.pid,
-                level: 0,
-                frame: sourceFrame
-            )
+        let handler = controller.axEventHandler
+        defer { handler.cleanup() }
+        let gate = LifecycleQueryGate()
+        defer { gate.resume() }
+        let started = expectation(description: "retry metadata query started")
+        handler.windowInfoProvider = { _ in
+            XCTFail("Admission retry queried metadata synchronously")
+            return nil
+        }
+        handler.lifecycleQueries.query = { queriedWindowId in
+            XCTAssertEqual(queriedWindowId, windowId)
+            started.fulfill()
+            return await gate.wait()
         }
 
-        let requiresEarlyReturn = controller.axEventHandler
-            .retryAdmissionAfterFrameChangeRequiresEarlyReturn(windowId: windowId)
+        let requiresEarlyReturn = handler.retryAdmissionAfterFrameChangeRequiresEarlyReturn(windowId: windowId)
+        let task = try XCTUnwrap(handler.lifecycleQueries.task)
+        XCTAssertNil(controller.workspaceManager.entry(for: token))
+        await fulfillment(of: [started], timeout: 2)
+        controller.workspaceManager.addWindow(
+            axRef, pid: token.pid, windowId: token.windowId,
+            to: destinationWorkspace, mode: .floating
+        )
+        handler.finishAdmissionRetryAfterTracking(windowId: windowId)
+        gate.resume(WindowServerInfo(id: windowId, pid: token.pid, level: 0, frame: sourceFrame))
+        await task.value
+        let admitted = controller.workspaceManager.entry(for: token) != nil
         let finalWorkspace = controller.workspaceManager.workspace(for: token)
         let retryFinished = controller.axEventHandler.admissionRetryStateByWindowId[windowId] == nil
         let admittedEntry = try XCTUnwrap(controller.workspaceManager.entry(for: token))

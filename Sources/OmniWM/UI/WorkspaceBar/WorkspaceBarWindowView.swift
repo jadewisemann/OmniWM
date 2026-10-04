@@ -7,15 +7,6 @@ import SwiftUI
 enum WorkspaceBarWindowContext {
     case tiled
     case floating
-
-    var label: String {
-        switch self {
-        case .tiled:
-            "window"
-        case .floating:
-            "floating window"
-        }
-    }
 }
 
 enum WorkspaceBarHiddenIndicatorStyle: Equatable {
@@ -87,47 +78,40 @@ struct WorkspaceBarWindowPresentation {
     }
 
     var accessibilityLabel: String {
-        if window.windowCount > 1 {
-            return "\(window.appName), \(window.windowCount) \(context.label)s"
+        switch (context, window.windowCount > 1) {
+        case (.tiled, false):
+            return String(localized: "\(window.appName) window")
+        case (.tiled, true):
+            return String(localized: "\(window.appName), \(window.windowCount) windows")
+        case (.floating, false):
+            return String(localized: "\(window.appName) floating window")
+        case (.floating, true):
+            return String(localized: "\(window.appName), \(window.windowCount) floating windows")
         }
-        return "\(window.appName) \(context.label)"
     }
 
     var accessibilityValue: String {
         var values: [String] = []
         if isFocused {
-            values.append("Focused")
+            values.append(String(localized: "Focused"))
         }
         if window.isAppHidden {
-            values.append(window.windowCount > 1 ? "All \(window.windowCount) windows hidden" : "App hidden")
+            values.append(window.windowCount > 1
+                ? String(localized: "All \(window.windowCount) windows hidden")
+                : String(localized: "App hidden"))
         } else if window.hasHiddenWindows {
-            values.append("\(window.hiddenWindowCount) of \(window.windowCount) windows hidden")
+            values.append(String(localized: "\(window.hiddenWindowCount) of \(window.windowCount) windows hidden"))
         }
         return values.joined(separator: ", ")
     }
 
     var accessibilityHint: String {
         if window.windowCount > 1 {
-            return "Opens the window list"
+            return String(localized: "Opens the window list")
         }
         return window.isAppHidden
-            ? "Unhides the app and focuses this window"
-            : "Focuses this window"
-    }
-
-    var help: String {
-        if window.windowCount == 1 {
-            return window.isAppHidden
-                ? "Unhide and focus \(window.appName)"
-                : "Focus \(window.appName) window"
-        }
-        if window.isAppHidden {
-            return "Show \(window.appName) windows — app hidden"
-        }
-        if window.hasHiddenWindows {
-            return "Show \(window.appName) windows — \(window.hiddenWindowCount) of \(window.windowCount) hidden"
-        }
-        return "Show \(window.appName) windows"
+            ? String(localized: "Unhides the app and focuses this window")
+            : String(localized: "Focuses this window")
     }
 }
 
@@ -137,30 +121,31 @@ struct WorkspaceBarWindowListRowPresentation {
     var accessibilityValue: String {
         var values: [String] = []
         if window.isFocused {
-            values.append("Focused")
+            values.append(String(localized: "Focused"))
         }
         if window.isAppHidden {
-            values.append("App hidden")
+            values.append(String(localized: "App hidden"))
         }
         return values.joined(separator: ", ")
     }
 
     var accessibilityHint: String {
         window.isAppHidden
-            ? "Unhides the app and focuses this window"
-            : "Focuses this window"
+            ? String(localized: "Unhides the app and focuses this window")
+            : String(localized: "Focuses this window")
     }
 
     var help: String {
         window.isAppHidden
-            ? "Unhide and focus \(window.title)"
-            : "Focus \(window.title)"
+            ? String(localized: "Unhide and focus \(window.title)")
+            : String(localized: "Focus \(window.title)")
     }
 }
 
 @MainActor
 struct WindowIconView: View {
     let window: WorkspaceBarWindowItem
+    let workspaceId: WorkspaceDescriptor.ID
     let iconSize: CGFloat
     let isFocused: Bool
     let isInFocusedWorkspace: Bool
@@ -173,7 +158,27 @@ struct WindowIconView: View {
     let onFocusWindow: (WindowHandle) -> Void
 
     @State private var isHovered = false
-    @State private var showingWindowList = false
+    @Environment(\.workspaceBarInteraction) private var interaction
+    @Environment(WorkspaceBarModel.self) private var model: WorkspaceBarModel?
+    @Environment(WorkspaceBarDragPresentation.self) private var drag: WorkspaceBarDragPresentation?
+
+    private var isDragSource: Bool {
+        drag?.sourceTokens.contains(window.id) == true
+    }
+
+    private var isDropTarget: Bool {
+        drag?.highlights.contains(.icon(workspaceId, window.id)) == true
+    }
+
+    private var windowListBinding: Binding<Bool> {
+        Binding(
+            get: { model?.presentedWindowList == window.id },
+            set: { isPresented in
+                guard !isPresented, model?.presentedWindowList == window.id else { return }
+                model?.presentedWindowList = nil
+            }
+        )
+    }
 
     private var resolvedAccentColor: Color {
         accentColor ?? .accentColor
@@ -188,11 +193,7 @@ struct WindowIconView: View {
             inactiveIconOpacity: inactiveIconOpacity
         )
         Button {
-            if window.windowCount > 1 {
-                showingWindowList = true
-            } else {
-                onFocusWindow(window.handle)
-            }
+            interaction?.onActivateWindow(workspaceId, window.id)
         } label: {
             AppIconImage(icon: window.icon)
                 .frame(width: iconSize, height: iconSize)
@@ -203,7 +204,7 @@ struct WindowIconView: View {
                             .blendMode(.sourceAtop)
                     }
                 }
-                .opacity(presentation.iconOpacity)
+                .opacity(isDragSource ? 0.35 : presentation.iconOpacity)
                 .shadow(color: resolvedAccentColor.opacity(glowOpacity), radius: glowRadius)
                 .accessibilityHidden(true)
                 .overlay(alignment: .topTrailing) {
@@ -219,6 +220,12 @@ struct WindowIconView: View {
                     }
                 }
                 .frame(minWidth: max(16, iconSize + 4), minHeight: max(16, iconSize + 4))
+                .overlay {
+                    if isDropTarget {
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .strokeBorder(resolvedAccentColor, lineWidth: 1.5)
+                    }
+                }
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -227,8 +234,9 @@ struct WindowIconView: View {
         .animation(animationsEnabled ? .easeInOut(duration: 0.1) : nil, value: isHovered)
         .onHover { hovering in
             isHovered = hovering
+            interaction?.onHoverWindow(workspaceId, window.id, hovering)
         }
-        .sheet(isPresented: $showingWindowList) {
+        .sheet(isPresented: windowListBinding) {
             WindowListSheet(
                 windows: window.allWindows,
                 appName: window.appName,
@@ -236,14 +244,16 @@ struct WindowIconView: View {
                 textColor: textColor,
                 onFocusWindow: { handle in
                     onFocusWindow(handle)
-                    showingWindowList = false
+                    model?.presentedWindowList = nil
                 }
             )
         }
         .accessibilityLabel(presentation.accessibilityLabel)
         .accessibilityValue(presentation.accessibilityValue)
         .accessibilityHint(presentation.accessibilityHint)
-        .help(presentation.help)
+        .accessibilityAction(.showMenu) {
+            interaction?.onShowMenu(.window(workspaceId, window.id))
+        }
     }
 
     private var scale: CGFloat {

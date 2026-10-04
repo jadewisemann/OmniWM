@@ -93,9 +93,6 @@ extension MouseEventHandler {
 
     private func handleFocusFollowsMouse(at location: CGPoint, windowIdUnderPointer: Int?) {
         guard let controller else { return }
-        guard controller.focusPolicyEngine.evaluate(.focusFollowsMouse).allowsFocusChange else {
-            return
-        }
         guard !externalFocusBlocksFocusFollowsMouse,
               !hasPendingNativeFullscreenTransition(at: location),
               !isPointerDisplayShowingFullscreenSpace(at: location)
@@ -115,9 +112,10 @@ extension MouseEventHandler {
         let token = focusFollowsMouseToken(for: target)
 
         guard token != controller.workspaceManager.selectedManagedToken else { return }
-
-        state.lastFocusFollowsMouseTime = now
-        activateFocusFollowsMouseTarget(target)
+        controller.focusPolicyEngine.performIfFocusFollowsMouseAllowed {
+            state.lastFocusFollowsMouseTime = now
+            activateFocusFollowsMouseTarget(target)
+        }
     }
 
     private func hasPendingNativeFullscreenTransition(at location: CGPoint) -> Bool {

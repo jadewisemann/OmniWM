@@ -79,7 +79,7 @@ extension DwindleLayoutHandler {
         return entry.workspaceId == workspaceId
             && entry.mode == .tiling
             && entry.layoutReason == .standard
-            && !controller.isManagedWindowSuppressedByMacOSHide(token)
+            && !controller.isManagedWindowSuppressedByMacOS(token)
             && !controller.isManagedWindowSuspendedForNativeFullscreen(token)
     }
 

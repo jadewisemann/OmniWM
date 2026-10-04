@@ -21,7 +21,7 @@ extension DwindleLayoutHandler {
             }
             let previousSelection = engine.selectedNode(in: wsId)
             guard let token = engine.moveFocus(direction: direction, in: wsId) else { return }
-            guard !controller.isManagedWindowSuppressedByMacOSHide(token) else {
+            guard !controller.isManagedWindowSuppressedByMacOS(token) else {
                 engine.setSelectedNode(previousSelection, in: wsId)
                 controller.layoutRefreshController.requestLayoutCommandRelayout(
                     affectedWorkspaceIds: [wsId]
@@ -76,7 +76,7 @@ extension DwindleLayoutHandler {
               entry.workspaceId == workspaceId,
               entry.mode == .tiling,
               entry.layoutReason == .standard,
-              !controller.isManagedWindowSuppressedByMacOSHide(token)
+              !controller.isManagedWindowSuppressedByMacOS(token)
         else {
             return .missing
         }

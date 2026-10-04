@@ -57,6 +57,46 @@ final class OverviewMouseButtonTests: XCTestCase {
         XCTAssertNil(handler.state.capturedOverviewButton)
     }
 
+    func testDisablingOverviewPassesNewPressAndConsumesCapturedRelease() throws {
+        let controller = makeController()
+        let handler = controller.mouseEventHandler
+        try controller.settings.setOverviewMouseButton(2)
+        XCTAssertTrue(handler.receiveTapOverviewMouseButton(type: .otherMouseDown, button: 2))
+        XCTAssertTrue(controller.isOverviewOpen())
+
+        controller.setOverviewEnabled(false)
+
+        XCTAssertFalse(controller.isOverviewOpen())
+        XCTAssertTrue(handler.receiveTapOverviewMouseButton(type: .otherMouseUp, button: 2))
+        XCTAssertFalse(handler.receiveTapOverviewMouseButton(type: .otherMouseDown, button: 2))
+        XCTAssertNil(handler.state.capturedOverviewButton)
+        controller.setOverviewEnabled(true)
+        XCTAssertTrue(handler.receiveTapOverviewMouseButton(type: .otherMouseDown, button: 2))
+        XCTAssertTrue(controller.isOverviewOpen())
+        controller.windowActionHandler.invalidateOverviewDeferredActionsForServiceStop()
+    }
+
+    func testDisabledPresentationCommandsDoNotRegisterBindingsOrOpenOverview() {
+        let controller = makeController()
+        let savedBindings = controller.settings.hotkeyBindings
+        controller.updateHotkeyBindings(savedBindings)
+        let originalCount = controller.hotkeys.hotkeyHealthFacts().bindingCount
+
+        controller.setOverviewEnabled(false)
+        controller.settings.quakeTerminal.enabled = false
+        controller.setQuakeTerminalEnabled(false)
+
+        XCTAssertEqual(controller.hotkeys.hotkeyHealthFacts().bindingCount, originalCount - 2)
+        XCTAssertEqual(controller.commandHandler.performCommand(.presentation(.overview)), .ignoredDisabled)
+        XCTAssertEqual(controller.commandHandler.performCommand(.presentation(.quakeTerminal)), .ignoredDisabled)
+        controller.windowActionHandler.toggleOverview()
+        XCTAssertFalse(controller.isOverviewOpen())
+        XCTAssertEqual(controller.settings.hotkeyBindings, savedBindings)
+
+        controller.setOverviewEnabled(true)
+        XCTAssertEqual(controller.hotkeys.hotkeyHealthFacts().bindingCount, originalCount - 1)
+    }
+
     func testHyperRoutingYieldsCapturedOverviewSequenceAcrossReassignment() throws {
         let controller = makeController()
         let handler = controller.mouseEventHandler

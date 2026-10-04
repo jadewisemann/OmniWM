@@ -7,6 +7,7 @@ let ghosttyMacOSLibraryDirectory = "\(packageDirectory)/Frameworks/GhosttyKit.xc
 
 let package = Package(
     name: "OmniWM",
+    defaultLocalization: "en",
     platforms: [
         .macOS(.v26)
     ],
@@ -51,12 +52,20 @@ let package = Package(
             ]
         ),
         .target(
+            name: "OmniWMLauncherSPI",
+            path: "Sources/OmniWMLauncherSPI",
+            cSettings: [
+                .treatAllWarnings(as: .error)
+            ]
+        ),
+        .target(
             name: "OmniWM",
             dependencies: [
                 "GhosttyKit",
                 "OmniWMIPC",
                 "OmniWMMenuBarAssertion",
                 "OmniWMLayerCorners",
+                "OmniWMLauncherSPI",
                 .product(name: "TOML", package: "swift-toml")
             ],
             path: "Sources/OmniWM",

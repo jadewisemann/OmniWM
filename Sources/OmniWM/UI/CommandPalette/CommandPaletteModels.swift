@@ -15,6 +15,19 @@ struct CommandPaletteWindowItem: Identifiable {
     let appIcon: NSImage?
     let workspaceName: String
     let isAppHidden: Bool
+    let markNames: [String]
+}
+
+struct CommandPaletteCommandItem: Identifiable {
+    let spec: ActionSpec
+    let shortcut: String
+    let hasShortcut: Bool
+    let shortcutSearchTerms: [String]
+    let isLayoutCompatible: Bool
+
+    var id: String {
+        spec.id
+    }
 }
 
 struct CommandPaletteAppSnapshot: Equatable {
@@ -51,20 +64,25 @@ struct CommandPaletteSummonAnchor: Equatable {
 struct CommandPaletteFocusTarget {
     let app: CommandPaletteAppSnapshot
     let focusedWindow: AXUIElement?
+    let focusedWindowID: CGWindowID?
 }
 
 enum CommandPaletteSelectionID: Hashable {
     case window(WindowToken)
     case menu(UUID)
     case clipboard(UUID)
+    case command(String)
+    case application(LauncherSectionID, String)
+    case file(LauncherSectionID, String)
 }
 
-enum CommandPaletteSelectionTrigger {
+enum CommandPaletteSelectionTrigger: Equatable {
     case primary
     case alternate
+    case reveal
 }
 
 struct CommandPaletteClipboardPasteTarget {
     let focusTarget: CommandPaletteFocusTarget
-    let expectedWindowId: CGWindowID?
+    let expectedWindowId: CGWindowID
 }

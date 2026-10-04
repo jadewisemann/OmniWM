@@ -120,7 +120,8 @@ final class NiriResizeViewportTests: XCTestCase {
                 gaps: fixture.gap,
                 orientation: .horizontal
             ),
-            state: &fixture.state
+            state: &fixture.state,
+            preservesCenteredView: true
         )
     }
 
@@ -263,5 +264,52 @@ final class NiriResizeViewportTests: XCTestCase {
             )
         )
         XCTAssertEqual(fixture.state.viewOffset, fixture.rightAlignedOffset, accuracy: 0.001)
+    }
+
+    func testCenteredFirstAndLastColumnsSurviveRelayoutViewportPasses() throws {
+        var fixture = makeFixture(columnCount: 3)
+        let context = NiriInteractionContext(
+            workspaceId: fixture.workspaceId,
+            motion: .disabled,
+            workingFrame: fixture.workingFrame,
+            gaps: fixture.gap,
+            orientation: .horizontal
+        )
+        let centeredOffset = -(fixture.workingFrame.width - fixture.columnSpan) / 2
+
+        for index in [0, fixture.columns.count - 1] {
+            fixture.state.activeColumnIndex = index
+            fixture.state.selectedNodeId = fixture.columns[index].windowNodes.first?.id
+            XCTAssertTrue(fixture.engine.centerColumn(context: context, state: &fixture.state))
+            XCTAssertEqual(fixture.state.viewOffset, centeredOffset, accuracy: 0.001)
+
+            XCTAssertFalse(applyRelayoutViewportPasses(&fixture))
+            XCTAssertEqual(fixture.state.viewOffset, centeredOffset, accuracy: 0.001)
+        }
+    }
+
+    func testRemovalFitsAutoCenteredColumnOnceItsOverflowingPairIsGone() throws {
+        var fixture = makeFixture(columnCount: 2, gap: 0, viewportWidth: 1_000)
+        fixture.engine.updateConfiguration(centerFocusedColumn: .onOverflow)
+        for (column, span) in zip(fixture.columns, [CGFloat(400), 600]) {
+            column.width = .fixed(span)
+            column.cachedWidth = span
+        }
+        fixture.state.activeColumnIndex = 1
+        fixture.state.jumpOffset(to: -200)
+
+        XCTAssertTrue(
+            fixture.engine.correctViewportAfterColumnRemoval(
+                context: .init(
+                    workspaceId: fixture.workspaceId,
+                    motion: .disabled,
+                    workingFrame: fixture.workingFrame,
+                    gaps: fixture.gap,
+                    orientation: .horizontal
+                ),
+                state: &fixture.state
+            )
+        )
+        XCTAssertEqual(fixture.viewStart(sizeKeyPath: \.settledWidth), 0, accuracy: 0.001)
     }
 }

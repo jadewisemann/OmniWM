@@ -99,6 +99,18 @@ final class AXParkFrameLedger {
         return state.target.frame
     }
 
+    func parkTargetFrame(for windowId: Int) -> CGRect? {
+        parkFrameTargetStatesByWindowId[windowId]?.target.frame
+    }
+
+    func parkTarget(matching result: AXFrameApplyResult) -> AXFrameApplicationTarget? {
+        guard let target = parkFrameTargetStatesByWindowId[result.windowId]?.target,
+              target.pid == result.pid,
+              sameAXWindowIdentity(target.expectedWindow, result.expectedWindow)
+        else { return nil }
+        return target
+    }
+
     private func parkFrameFailureReason(for result: AXFrameApplyResult) -> AXFrameWriteFailureReason? {
         if let failureReason = result.writeResult.failureReason {
             return failureReason
@@ -322,6 +334,7 @@ extension AXParkFrameLedger {
             guard pending.retriesRemaining > 0,
                   pendingParkWindowIds.contains(windowId)
             else {
+                result.recordParkTerminalFailure(failureReason, retriesRemaining: pending.retriesRemaining)
                 continue
             }
 

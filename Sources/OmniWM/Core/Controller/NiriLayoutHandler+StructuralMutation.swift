@@ -90,7 +90,7 @@ extension NiriLayoutHandler {
         guard let controller,
               let entry = controller.workspaceManager.entry(for: handle.id),
               controller.workspaceManager.handle(for: handle.id) === handle,
-              !controller.workspaceManager.isAppHidden(pid: entry.pid),
+              !controller.workspaceManager.isWindowSuppressedByMacOS(entry.token),
               controller.workspaceManager.activeLayoutKind(for: entry.workspaceId) == .niri,
               let engine = controller.niriEngine,
               !engine.isExcludedFromProjection(handle.id, in: entry.workspaceId),
@@ -101,7 +101,7 @@ extension NiriLayoutHandler {
         }
 
         let workspaceId = entry.workspaceId
-        let workingFrame = controller.insetWorkingFrame(for: monitor)
+        let workingFrame = controller.niriWorkingFrame(for: monitor)
         let gaps = controller.innerGap(for: monitor)
         let orientation = resolvedOrientation(
             for: workspaceId,

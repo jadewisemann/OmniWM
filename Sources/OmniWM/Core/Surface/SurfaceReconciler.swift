@@ -114,7 +114,7 @@ final class SurfaceReconciler {
     }
 
     func reconcileAnimationTick() {
-        guard let controller else { return }
+        guard let controller, controller.settings.borders.enabled else { return }
         let world = WorldView(controller: controller)
         let desiredBorder = world.hasStartedServices
             ? SurfaceDerivation.deriveAnimationBorder(world: world, previous: appliedScene.border)
@@ -215,6 +215,11 @@ final class SurfaceReconciler {
         parkingEdgeMaskManager.removeAll()
         nativeFullscreenState.cleanup()
         appliedScene = .empty
+    }
+
+    func cleanupBorder() {
+        borderApplier.cleanup()
+        appliedScene.border = nil
     }
 
     private func flushScheduledReconcile() {

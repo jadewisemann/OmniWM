@@ -1,17 +1,23 @@
 ---
 title: Keyboard Shortcuts
-description: Every default OmniWM hotkey, the Shared/Niri/Dwindle layout legend, and how the Hyper modifier works.
+description: Every default OmniWM hotkey, the layout legend, Hyper setup, and shortcut conflict troubleshooting.
 sidebar:
   order: 5
 ---
 
 ## Customization and the Hyper modifier
 
-All shortcuts are customizable in **Settings > Hotkeys**. `Hyper` is the literal `Control + Option + Shift + Command` chord by default; which modifiers make up `Hyper` is configurable in Settings > Hotkeys (for example, exclude `Shift` to keep `Hyper + Shift + …` free for extra bindings). Changing the combination retargets every shortcut that currently resolves to `Hyper` onto the new one, so the shortcut list updates in place as you toggle the modifiers.
+All global shortcuts are customizable in **Settings > Hotkeys**. `Hyper` is the literal `Control + Option + Shift + Command` chord by default; which modifiers make up `Hyper` is configurable in Settings > Hotkeys (for example, exclude `Shift` to keep `Hyper + Shift + …` free for extra bindings). Changing the combination retargets every shortcut that currently resolves to `Hyper` onto the new one, so the shortcut list updates in place as you toggle the modifiers.
 
 Optionally pick a **System Hyper Trigger** — a single key (Caps Lock, F13–F20, or a left- or right-side modifier) or an extra mouse button that acts as `Hyper` while held (this needs the Input Monitoring permission). Leave the trigger as `None` if you already produce `Hyper` another way, such as a Karabiner Elements remap.
 
-Settings hides advanced actions from the shortcut list by default. Turn on `Include Advanced Commands` in Settings > Hotkeys to see and bind them; the tables below include both standard and advanced actions.
+Settings > Hotkeys lists all actions that can be assigned a shortcut, including advanced actions.
+
+## When a shortcut does not fire
+
+Confirm the binding and any registration warning in **Settings > Hotkeys**, then check **Settings > Troubleshooting** for related diagnostics. If skhd, Raycast, or another shortcut utility is still running with the same binding, stop it or reassign the conflicting shortcut before editing `settings.toml`.
+
+[HotkeyClash](https://github.com/Wunderlandmedia/HotkeyClash) can inspect shortcuts across supported apps, config files, and macOS. It does not parse Raycast settings.
 
 ## Layout legend
 
@@ -36,6 +42,8 @@ Settings hides advanced actions from the shortcut list by default. Turn on `Incl
 | Move Column to Workspace Up | `Control + Option + Shift + Page Up` | `Niri` |
 | Move Column to Workspace Down | `Control + Option + Shift + Page Down` | `Niri` |
 
+Creating workspace 10 or higher adds its Switch, Move, and Move Column actions to **Settings > Hotkeys** as `Unassigned`. The rows disappear when the workspace is removed.
+
 ## Focus
 
 | Action | Default Shortcut | Layout |
@@ -53,12 +61,27 @@ Settings hides advanced actions from the shortcut list by default. Turn on `Incl
 | Focus Window 1-9 in Column | `Unassigned` | `Niri` |
 | Toggle Command Palette | `Control + Option + Space` | `Shared` |
 | Open Menu Anywhere | `Control + Option + M` | `Shared` |
+| Set Mark on Focused Window | `Unassigned` | `Shared` |
+| Remove Mark from Focused Window | `Unassigned` | `Shared` |
 | Close Focused Window | `Unassigned` | `Shared` |
 | Toggle Workspace Bar | `Unassigned` | `Shared` |
 | Toggle Hidden Icons Bar | `Unassigned` | `Shared` |
 | Toggle Quake Terminal | `` Option + ` `` | `Shared` |
 | Toggle Overview | `Option + Shift + O` | `Shared` |
 | Toggle System Stats | `Unassigned` | `Shared` |
+
+The Set Mark and Remove Mark global actions and the Command Palette mark shortcuts below are available.
+
+### Window marks in the Command Palette
+
+These shortcuts are available while the Command Palette is open in **Windows** mode. They act on the selected window row and are shown beside the matching Palette actions.
+
+| Action | Shortcut |
+|--------|----------|
+| Mark selected window | `Control + Option + Shift + M` |
+| Remove a mark from the selected window | `Control + Option + Shift + R` |
+
+These shortcuts are local to the open Palette and yield to conflicting enabled global shortcuts; the affected Palette action remains available as a button. **Set Mark on Focused Window** and **Remove Mark from Focused Window** are also available as separate, unassigned actions in **Settings > Hotkeys** for configurable global shortcuts. Outside the Palette, key combinations retain their configured global behavior.
 
 ## Move Window
 
@@ -70,6 +93,8 @@ Settings hides advanced actions from the shortcut list by default. Turn on `Incl
 | Consume Window into Column / Expel Window from Column | `Unassigned` | `Niri` |
 
 ## Monitor
+
+**Fork builds:** The `Option + P` focus shortcut and `Option + Shift + P` window-move action below are included in this fork. Official v0.7.4 uses `Control + Command + Tab` for Focus Next Monitor and does not include the next-monitor window action.
 
 | Action | Default Shortcut | Layout |
 |--------|------------------|--------|
@@ -121,14 +146,16 @@ The directional window-to-monitor actions send the focused window directly to th
 | Expand Container to Available Primary Span | `Control + Option + F` | `Niri` |
 | Move Column to First / Last | `Control + Option + Home / End` | `Niri` |
 | Move Column to Index 1-9 | `Unassigned` | `Niri` |
-| Set Container Primary Span -10% / +10% | `Option + -` / `Option + =` | `Niri` |
-| Set Window Secondary Span -10% / +10% | `Option + Shift + -` / `Option + Shift + =` | `Niri` |
-| Set Window Primary Span -10% / +10% | `Unassigned` | `Niri` |
+| Shrink / Grow Container Primary Span | `Option + -` / `Option + =` | `Niri` |
+| Shrink / Grow Window Secondary Span | `Option + Shift + -` / `Option + Shift + =` | `Niri` |
+| Shrink / Grow Window Primary Span | `Unassigned` | `Niri` |
 | Reset Window Secondary Span | `Control + Option + R` | `Niri` |
 | Cycle Window Primary Span Forward / Backward | `Unassigned` | `Niri` |
 | Cycle Window Secondary Span Forward / Backward | `Unassigned` | `Niri` |
 | Center Column | `Unassigned` | `Niri` |
 | Center Visible Columns | `Unassigned` | `Niri` |
+
+Niri grow/shrink actions use a configurable increment, defaulting to 5% instead of 10%. Change **Resize Increment** in Niri settings or `[niri].resizeStepPercent` in TOML (1–100). Explicit `omniwmctl` size arguments keep their specified amounts.
 
 `Consume or Expel Window Left / Right` exist as automation-only actions. They are reachable from `omniwmctl` but never appear in Settings > Hotkeys, because they intentionally cannot be bound to a shortcut.
 

@@ -43,12 +43,16 @@ struct WindowRuleReevaluation {
         let pidTargets = collectDirectTargets(targets)
         guard await collectPIDTargets(pidTargets), isCurrent else { return outcome(stale: true) }
         guard !tokensToReevaluate.isEmpty else { return outcome(stale: false) }
-        let batchedWindowInfoByToken = batchedWindowServerInfo(for: tokensToReevaluate)
+        let batchedWindowInfoByToken = await batchedWindowServerInfo(for: tokensToReevaluate)
+        guard isCurrent else { return outcome(stale: true) }
         for token in tokensToReevaluate.sorted(by: {
             if $0.pid == $1.pid { return $0.windowId < $1.windowId }
             return $0.pid < $1.pid
         }) {
-            guard let window = prepareWindow(token, windowInfo: batchedWindowInfoByToken[token]) else { continue }
+            guard let window = prepareWindow(
+                token, windowInfo: batchedWindowInfoByToken?[token],
+                windowServerLookupAttempted: batchedWindowInfoByToken != nil
+            ) else { continue }
             apply(window)
         }
         finish()
@@ -57,7 +61,8 @@ struct WindowRuleReevaluation {
 
     private mutating func prepareWindow(
         _ token: WindowToken,
-        windowInfo: WindowServerInfo?
+        windowInfo: WindowServerInfo?,
+        windowServerLookupAttempted: Bool
     ) -> RuleReevaluationWindow? {
         let existingEntry = controller.workspaceManager.entry(for: token)
         let axRef = liveWindowsByToken[token] ?? existingEntry?.axRef
@@ -73,7 +78,8 @@ struct WindowRuleReevaluation {
         let evaluation = controller.evaluateWindowDisposition(
             axRef: axRef,
             pid: token.pid,
-            windowInfo: windowInfo
+            windowInfo: windowInfo,
+            windowServerLookupAttempted: windowServerLookupAttempted
         )
         let ruleEffects = evaluation.decision.disposition == .undecided
             ? existingEntry?.ruleEffects ?? evaluation.decision.ruleEffects
@@ -357,10 +363,16 @@ extension WindowRuleReevaluation {
 
     private func batchedWindowServerInfo(
         for tokens: Set<WindowToken>
-    ) -> [WindowToken: WindowServerInfo] {
+    ) async -> [WindowToken: WindowServerInfo]? {
         let windowIds = Set(tokens.compactMap { UInt32(exactly: $0.windowId) })
-        guard windowIds.count > 1 else { return [:] }
-        let infoByWindowId = controller.axEventHandler.resolveWindowInfo(windowIds)
+        guard windowIds.count > 1 else { return nil }
+        let infoByWindowId: [UInt32: WindowServerInfo]
+        do {
+            infoByWindowId = try await controller.axEventHandler.resolveWindowInfo(windowIds)
+        } catch {
+            DiagnosticsEventRecorder.shared.recordLifecycle(name: "rules.windowQuery.failed")
+            return [:]
+        }
         return tokens.reduce(into: [:]) { result, token in
             guard let windowId = UInt32(exactly: token.windowId),
                   let info = WMController.exactWindowServerInfo(infoByWindowId[windowId], for: token)

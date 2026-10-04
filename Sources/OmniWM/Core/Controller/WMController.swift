@@ -32,6 +32,8 @@ final class WMController {
     @ObservationIgnored
     private var appliedBorderLayoutConfig: BorderLayoutConfig
     let workspaceManager: WorkspaceManager
+    @ObservationIgnored
+    let windowMarkRegistry = WindowMarkRegistry()
     let hotkeys = HotkeyCenter()
     private(set) var hotkeyRegistrationFailures: [HotkeyCommand: HotkeyRegistrationFailureReason] = [:]
     private(set) var systemHyperTriggerFailure: SystemHyperTriggerFailure?
@@ -197,6 +199,8 @@ final class WMController {
     @ObservationIgnored
     let ownedWindowRegistry: OwnedWindowRegistry
     @ObservationIgnored
+    let columnModeToast: ColumnModeToastController
+    @ObservationIgnored
     var warpMouseCursorPosition: (CGPoint) -> Void = { CGWarpMouseCursorPosition($0) }
     @ObservationIgnored
     var currentMouseLocation: () -> CGPoint = { NSEvent.mouseLocation }
@@ -237,6 +241,7 @@ final class WMController {
         traceCaptureCoordinator = RuntimeTraceCaptureCoordinator(diagnosticsDirectory: diagnosticsDirectory)
         self.windowFocusOperations = windowFocusOperations
         self.ownedWindowRegistry = ownedWindowRegistry
+        columnModeToast = ColumnModeToastController(ownedWindowRegistry: ownedWindowRegistry)
         workspaceManager = WorkspaceManager(settings: settings)
         focusPolicyEngine = FocusPolicyEngine()
         if self.workspaceBarIconResolver.synchronize(
@@ -258,7 +263,7 @@ extension WMController {
         if enabled {
             serviceLifecycleManager.start()
         } else {
-            serviceLifecycleManager.stop()
+            serviceLifecycleManager.stopRestoringWindows()
         }
         reconcileEnabledAndHotkeysState()
     }
@@ -284,6 +289,7 @@ extension WMController {
 
     func reconcileEnabledAndHotkeysState() {
         isEnabled = desiredEnabled && accessibilityPermissionGranted
+            && !serviceLifecycleManager.isStoppingForUser && !serviceLifecycleManager.quitRequested
 
         let shouldEnableHotkeys = desiredHotkeysEnabled
             && isEnabled
@@ -303,6 +309,9 @@ extension WMController {
             enabled: settings.borders.enabled,
             width: CGFloat(settings.borders.width)
         )
+        if !current.enabled {
+            surfaceReconciler.cleanupBorder()
+        }
         let previous = appliedBorderLayoutConfig
         appliedBorderLayoutConfig = current
         let clearanceChanged = workspaceManager.monitors.contains { monitor in
@@ -400,10 +409,6 @@ extension WMController {
         systemHyperTriggerFailure = hotkeys.systemHyperTriggerFailure
     }
 
-    var workspaceBarRefreshIsEnabled: Bool {
-        settings.workspaceBar.enabled || settings.workspaceBar.monitorOverrides.contains(where: { $0.enabled == true })
-    }
-
     var statusBarRefreshIsEnabled: Bool {
         statusBarController != nil && settings.statusBar.showWorkspaceName
     }
@@ -463,7 +468,8 @@ extension WMController {
             maxItems: settings.clipboard.maxItems,
             maxItemBytes: settings.clipboard.maxItemBytes,
             maxTotalBytes: settings.clipboard.maxTotalBytes,
-            storageDirectory: clipboardHistoryDirectory
+            storageDirectory: clipboardHistoryDirectory,
+            ignoredTypes: settings.clipboard.ignoredTypes
         )
     }
 

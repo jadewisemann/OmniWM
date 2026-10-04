@@ -28,9 +28,7 @@ final class MultitouchLifecycleTests: XCTestCase {
     func testNilEnumerationNeverBecomesRunning() async {
         let harness = makeHarness([FakeMultitouchBackend.failedEnumeration(.unavailable)])
         harness.source.startLifecycle()
-        await drainMultitouchTasks()
-        harness.sleeper.resumeNext()
-        await drainMultitouchTasks()
+        await runNext(harness)
 
         let snapshot = harness.source.diagnosticsSnapshot()
         XCTAssertEqual(snapshot.state, .retrying)
@@ -44,9 +42,7 @@ final class MultitouchLifecycleTests: XCTestCase {
     func testEmptyEnumerationNeverBecomesRunning() async {
         let harness = makeHarness([FakeMultitouchBackend.enumeration([])])
         harness.source.startLifecycle()
-        await drainMultitouchTasks()
-        harness.sleeper.resumeNext()
-        await drainMultitouchTasks()
+        await runNext(harness)
 
         let snapshot = harness.source.diagnosticsSnapshot()
         XCTAssertEqual(snapshot.state, .retrying)
@@ -85,11 +81,10 @@ final class MultitouchLifecycleTests: XCTestCase {
         let firstGeneration = harness.source.diagnosticsSnapshot().activeGeneration
 
         harness.source.requestRevalidation(.wake)
-        await drainMultitouchTasks()
+        await harness.sleeper.waitForScheduledSleep(of: harness.source)
         XCTAssertEqual(harness.sleeper.requestedDurations.last, .seconds(1))
         XCTAssertEqual(harness.backend.callCount(.stop(101)), 0)
-        harness.sleeper.resumeNext()
-        await drainMultitouchTasks()
+        await harness.sleeper.resumeNext()
 
         let snapshot = harness.source.diagnosticsSnapshot()
         XCTAssertEqual(snapshot.state, .running)
@@ -110,11 +105,10 @@ final class MultitouchLifecycleTests: XCTestCase {
 
         harness.source.requestRevalidation(.wake)
         harness.source.requestRevalidation(.unlock)
-        await drainMultitouchTasks()
+        await harness.sleeper.waitForScheduledSleep(of: harness.source)
         XCTAssertEqual(harness.sleeper.pendingCount, 1)
         XCTAssertEqual(harness.sleeper.requestedDurations.last, .seconds(1))
-        harness.sleeper.resumeNext()
-        await drainMultitouchTasks()
+        await harness.sleeper.resumeNext()
 
         XCTAssertEqual(harness.backend.callCount(.enumerate), 2)
         XCTAssertEqual(harness.backend.callCount(.register(101)), 2)
@@ -161,24 +155,21 @@ final class MultitouchLifecycleTests: XCTestCase {
         controller.eventInterpreter.handleIntakeEvent(StampedIntakeEvent(seq: 1, event: .systemSleep))
         XCTAssertEqual(harness.source.diagnosticsSnapshot().state, .suspended)
         controller.eventInterpreter.handleIntakeEvent(StampedIntakeEvent(seq: 2, event: .systemWake))
-        await drainMultitouchTasks()
+        await harness.sleeper.waitForScheduledSleep(of: harness.source)
         XCTAssertEqual(harness.sleeper.requestedDurations.last, .seconds(1))
-        harness.sleeper.resumeNext()
-        await drainMultitouchTasks()
+        await harness.sleeper.resumeNext()
         let wakeGeneration = harness.source.diagnosticsSnapshot().activeGeneration
         XCTAssertNotEqual(wakeGeneration, initialGeneration)
 
         controller.serviceLifecycleManager.handleUnlockDetected()
-        await drainMultitouchTasks()
+        await harness.sleeper.waitForScheduledSleep(of: harness.source)
         XCTAssertEqual(harness.sleeper.requestedDurations.last, .seconds(1))
-        harness.sleeper.resumeNext()
-        await drainMultitouchTasks()
+        await harness.sleeper.resumeNext()
         XCTAssertNotEqual(harness.source.diagnosticsSnapshot().activeGeneration, wakeGeneration)
 
         controller.layoutRefreshController.resetState()
         controller.mouseEventHandler.cleanup()
-        harness.sleeper.resumeAll()
-        await drainMultitouchTasks()
+        await harness.sleeper.resumeAll()
     }
 
     func testArrivalRecoversSourceAfterEmptyStartup() async {
@@ -188,7 +179,9 @@ final class MultitouchLifecycleTests: XCTestCase {
         ])
         harness.source.startLifecycle()
         await runNext(harness)
+        let requests = harness.sleeper.requestedDurations.count
         harness.source.receiveTopologySignal(.arrival)
+        await harness.sleeper.waitForRequests(requests + 1)
         await runNext(harness)
 
         XCTAssertEqual(harness.source.diagnosticsSnapshot().state, .running)
@@ -272,10 +265,10 @@ final class MultitouchLifecycleTests: XCTestCase {
         harness.source.receiveTopologySignal(.arrival)
         harness.source.receiveTopologySignal(.removal)
         harness.source.receiveTopologySignal(.arrival)
-        await drainMultitouchTasks()
+        await harness.sleeper.waitForScheduledSleep(of: harness.source)
         XCTAssertEqual(harness.sleeper.pendingCount, 1)
-        harness.sleeper.resumeNext()
-        await drainMultitouchTasks()
+        await harness.sleeper.resumeNext()
+        await harness.sleeper.waitForScheduledSleep(of: harness.source)
 
         let replacementGeneration = harness.source.diagnosticsSnapshot().activeGeneration
         XCTAssertNotEqual(replacementGeneration, initialGeneration)
@@ -283,7 +276,9 @@ final class MultitouchLifecycleTests: XCTestCase {
         XCTAssertEqual(harness.backend.callCount(.register(101)), 2)
         XCTAssertEqual(harness.backend.callCount(.stop(101)), 1)
 
+        let requests = harness.sleeper.requestedDurations.count
         harness.source.receiveTopologySignal(.removal)
+        await harness.sleeper.waitForRequests(requests + 1)
         await runNext(harness)
 
         XCTAssertEqual(harness.source.diagnosticsSnapshot().activeGeneration, replacementGeneration)
@@ -304,8 +299,9 @@ final class MultitouchLifecycleTests: XCTestCase {
 
         let attempt = harness.source.diagnosticsSnapshot().retryAttempt
         XCTAssertEqual(harness.sleeper.requestedDurations.last, .seconds(4))
+        let requests = harness.sleeper.requestedDurations.count
         harness.source.receiveTopologySignal(.removal)
-        await drainMultitouchTasks()
+        await harness.sleeper.waitForRequests(requests + 1)
 
         XCTAssertEqual(harness.source.diagnosticsSnapshot().retryAttempt, attempt)
         XCTAssertEqual(harness.sleeper.requestedDurations.last, .milliseconds(100))
@@ -319,8 +315,7 @@ final class MultitouchLifecycleTests: XCTestCase {
         await runNext(suspended)
         let suspendedEnumerationCount = suspended.backend.callCount(.enumerate)
         suspended.source.suspendForSleep()
-        suspended.sleeper.resumeAll()
-        await drainMultitouchTasks()
+        await suspended.sleeper.resumeAll()
         XCTAssertEqual(suspended.source.diagnosticsSnapshot().state, .suspended)
         XCTAssertEqual(suspended.backend.callCount(.enumerate), suspendedEnumerationCount)
         await shutdown(suspended)
@@ -330,8 +325,7 @@ final class MultitouchLifecycleTests: XCTestCase {
         await runNext(stopped)
         let stoppedEnumerationCount = stopped.backend.callCount(.enumerate)
         stopped.source.shutdown()
-        stopped.sleeper.resumeAll()
-        await drainMultitouchTasks()
+        await stopped.sleeper.resumeAll()
         XCTAssertEqual(stopped.source.diagnosticsSnapshot().state, .stopped)
         XCTAssertEqual(stopped.backend.callCount(.enumerate), stoppedEnumerationCount)
     }
@@ -481,8 +475,7 @@ final class MultitouchLifecycleTests: XCTestCase {
         XCTAssertTrue(harness.source.shutdown())
         XCTAssertEqual(harness.source.diagnosticsSnapshot().lastUnregister, .alreadyUnregistered)
         XCTAssertNil(harness.source.diagnosticsSnapshot().activeGeneration)
-        harness.sleeper.resumeAll()
-        await drainMultitouchTasks()
+        await harness.sleeper.resumeAll()
     }
 
     func testCleanupFailureBlocksReregistrationUntilCleanupSucceeds() async {
@@ -534,9 +527,8 @@ final class MultitouchLifecycleTests: XCTestCase {
 
         controller.layoutRefreshController.resetState()
         controller.mouseEventHandler.cleanup()
-        old.sleeper.resumeAll()
-        replacement.sleeper.resumeAll()
-        await drainMultitouchTasks()
+        await old.sleeper.resumeAll()
+        await replacement.sleeper.resumeAll()
     }
 
     func testSuppliedDrainLocationDoesNotCountCursorSample() async {
@@ -606,9 +598,8 @@ final class MultitouchLifecycleTests: XCTestCase {
 
         controller.layoutRefreshController.resetState()
         handler.cleanup()
-        old.sleeper.resumeAll()
-        replacement.sleeper.resumeAll()
-        await drainMultitouchTasks()
+        await old.sleeper.resumeAll()
+        await replacement.sleeper.resumeAll()
     }
 
     func testPerformanceCountersSurviveSourceDisable() async throws {
@@ -640,8 +631,7 @@ final class MultitouchLifecycleTests: XCTestCase {
         controller.hasStartedServices = false
         controller.layoutRefreshController.resetState()
         handler.cleanup()
-        harness.sleeper.resumeAll()
-        await drainMultitouchTasks()
+        await harness.sleeper.resumeAll()
     }
 
     func testFeatureReenableRetriesRetainedSourceAfterDisableCleanupFailure() async {
@@ -684,8 +674,7 @@ final class MultitouchLifecycleTests: XCTestCase {
         controller.hasStartedServices = false
         controller.layoutRefreshController.resetState()
         handler.cleanup()
-        harness.sleeper.resumeAll()
-        await drainMultitouchTasks()
+        await harness.sleeper.resumeAll()
     }
 
     func testCleanupDiagnosticsPreserveFailureAcrossDevices() async {
@@ -698,8 +687,7 @@ final class MultitouchLifecycleTests: XCTestCase {
         XCTAssertEqual(harness.source.diagnosticsSnapshot().lastStop, .status(-1))
         XCTAssertEqual(harness.source.diagnosticsSnapshot().lastUnregister, .success)
         XCTAssertTrue(harness.source.shutdown())
-        harness.sleeper.resumeAll()
-        await drainMultitouchTasks()
+        await harness.sleeper.resumeAll()
     }
 
     func testTopologyObserverExhaustionIsBoundedAndWakeRearmsIt() async {
@@ -724,26 +712,31 @@ final class MultitouchLifecycleTests: XCTestCase {
 
         source.startLifecycle()
         await runNext(harness)
-        for _ in 0 ..< 6 {
-            await drainMultitouchTasks()
+        for request in 1 ..< 6 {
+            await topologyMonitor.sleeper.waitForRequests(request)
             XCTAssertGreaterThan(topologyMonitor.sleeper.pendingCount, 0)
-            topologyMonitor.sleeper.resumeNext()
+            await topologyMonitor.sleeper.resumeNext()
         }
-        await drainMultitouchTasks()
+        await topologyMonitor.sleeper.waitForRequests(6)
+        XCTAssertEqual(topologyMonitor.sleeper.pendingCount, 1)
+        XCTAssertEqual(lifecycleSleeper.pendingCount, 1)
+        await lifecycleSleeper.resumeNext()
+        let lifecycleRequests = lifecycleSleeper.requestedDurations.count
+        await topologyMonitor.sleeper.resumeNext()
+        await lifecycleSleeper.waitForRequests(lifecycleRequests + 1)
 
         XCTAssertEqual(topologyMonitor.streamCount, 7)
         XCTAssertEqual(source.diagnosticsSnapshot().topologyObserverState, .exhausted)
         XCTAssertEqual(topologyMonitor.sleeper.pendingCount, 0)
 
         source.requestRevalidation(reason)
-        await drainMultitouchTasks()
+        await topologyMonitor.sleeper.waitForRequests(7)
         XCTAssertEqual(topologyMonitor.streamCount, 8)
         XCTAssertEqual(source.diagnosticsSnapshot().topologyObserverState, .retrying(1))
 
         source.shutdown()
-        lifecycleSleeper.resumeAll()
-        topologyMonitor.sleeper.resumeAll()
-        await drainMultitouchTasks()
+        await lifecycleSleeper.resumeAll()
+        await topologyMonitor.sleeper.resumeAll()
     }
 
     func testTopologyObserverNotificationResetsConsecutiveFailureBudget() async {
@@ -759,10 +752,10 @@ final class MultitouchLifecycleTests: XCTestCase {
         )
 
         source.startLifecycle()
-        await drainMultitouchTasks()
+        await topologyMonitor.sleeper.waitForRequests(1)
         XCTAssertEqual(source.diagnosticsSnapshot().topologyObserverState, .retrying(1))
-        topologyMonitor.sleeper.resumeNext()
-        await drainMultitouchTasks()
+        await topologyMonitor.sleeper.resumeNext()
+        await topologyMonitor.sleeper.waitForRequests(2)
 
         XCTAssertEqual(topologyMonitor.streamCount, 2)
         XCTAssertEqual(source.diagnosticsSnapshot().lastTopologySignal, .arrival)
@@ -773,9 +766,8 @@ final class MultitouchLifecycleTests: XCTestCase {
         )
 
         source.shutdown()
-        lifecycleSleeper.resumeAll()
-        topologyMonitor.sleeper.resumeAll()
-        await drainMultitouchTasks()
+        await lifecycleSleeper.resumeAll()
+        await topologyMonitor.sleeper.resumeAll()
     }
 
     func testDiagnosticsFormatExposesLifecycleWithoutDeviceIdentity() async {
@@ -972,18 +964,17 @@ final class MultitouchLifecycleTests: XCTestCase {
     private func runNext(
         _ harness: (source: MultitouchGestureSource, backend: FakeMultitouchBackend, sleeper: ManualMultitouchSleeper)
     ) async {
-        await drainMultitouchTasks()
+        await harness.sleeper.waitForScheduledSleep(of: harness.source)
         XCTAssertGreaterThan(harness.sleeper.pendingCount, 0)
-        harness.sleeper.resumeNext()
-        await drainMultitouchTasks()
+        await harness.sleeper.resumeNext()
+        await harness.sleeper.waitForScheduledSleep(of: harness.source)
     }
 
     private func shutdown(
         _ harness: (source: MultitouchGestureSource, backend: FakeMultitouchBackend, sleeper: ManualMultitouchSleeper)
     ) async {
         harness.source.shutdown()
-        harness.sleeper.resumeAll()
-        await drainMultitouchTasks()
+        await harness.sleeper.resumeAll()
     }
 
     private func frame(count: Int, timestamp: Double) -> MultitouchGestureSource.RawFrame {

@@ -32,17 +32,35 @@ extension WorkspaceManager {
     func nextWorkspaceInOrder(
         on monitorId: Monitor.ID,
         from workspaceId: WorkspaceDescriptor.ID,
-        wrapAround: Bool
+        wrapAround: Bool,
+        skipEmpty: Bool = false
     ) -> WorkspaceDescriptor? {
-        adjacentWorkspaceInOrder(on: monitorId, from: workspaceId, offset: 1, wrapAround: wrapAround)
+        adjacentWorkspaceInOrder(
+            on: monitorId,
+            from: workspaceId,
+            offset: 1,
+            wrapAround: wrapAround,
+            skipEmpty: skipEmpty
+        )
     }
 
     func previousWorkspaceInOrder(
         on monitorId: Monitor.ID,
         from workspaceId: WorkspaceDescriptor.ID,
-        wrapAround: Bool
+        wrapAround: Bool,
+        skipEmpty: Bool = false
     ) -> WorkspaceDescriptor? {
-        adjacentWorkspaceInOrder(on: monitorId, from: workspaceId, offset: -1, wrapAround: wrapAround)
+        adjacentWorkspaceInOrder(
+            on: monitorId,
+            from: workspaceId,
+            offset: -1,
+            wrapAround: wrapAround,
+            skipEmpty: skipEmpty
+        )
+    }
+
+    func isOccupied(_ workspaceId: WorkspaceDescriptor.ID) -> Bool {
+        !barVisibleEntries(in: workspaceId, showFloatingWindows: true).isEmpty
     }
 
     func activeWorkspaceOrFirst(on monitorId: Monitor.ID) -> WorkspaceDescriptor? {
@@ -57,9 +75,13 @@ extension WorkspaceManager {
         on monitorId: Monitor.ID,
         from workspaceId: WorkspaceDescriptor.ID,
         offset: Int,
-        wrapAround: Bool
+        wrapAround: Bool,
+        skipEmpty: Bool
     ) -> WorkspaceDescriptor? {
-        let ordered = workspaces(on: monitorId)
+        var ordered = workspaces(on: monitorId)
+        if skipEmpty {
+            ordered = ordered.filter { $0.id == workspaceId || isOccupied($0.id) }
+        }
         guard ordered.count > 1 else { return nil }
         guard let currentIdx = ordered.firstIndex(where: { $0.id == workspaceId }) else { return nil }
 

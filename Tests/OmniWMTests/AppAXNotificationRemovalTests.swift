@@ -117,7 +117,7 @@ final class AppAXNotificationRemovalTests: XCTestCase {
             }
             XCTAssertTrue(pending.isEmpty)
 
-            var deliveredEvents = 0
+            var deliveredEvents: [IntakeEvent] = []
             let refcon = try XCTUnwrap(AppAXContext.destroyNotificationRefcon(for: windowId))
             AppAXContext.handleWindowDestroyedCallback(
                 pid: pid,
@@ -126,18 +126,20 @@ final class AppAXNotificationRemovalTests: XCTestCase {
                 callbackGeneration: callbackGeneration,
                 refcon: refcon,
                 registry: registry,
-                postEvent: { _ in deliveredEvents += 1 }
+                postEvent: { deliveredEvents.append($0) }
             )
-            AppAXContext.handleWindowMiniaturizedCallback(
-                pid: pid,
-                element: retiredElement,
-                observerKey: observerKey,
-                callbackGeneration: callbackGeneration,
-                refcon: refcon,
-                registry: registry,
-                postEvent: { _ in deliveredEvents += 1 }
-            )
-            XCTAssertEqual(deliveredEvents, 0)
+            for minimized in [true, false] {
+                AppAXContext.handleWindowMinimizedCallback(
+                    pid: pid,
+                    axRef: AXWindowRef(element: retiredElement, windowId: windowId),
+                    minimized: minimized,
+                    observerKey: observerKey,
+                    callbackGeneration: callbackGeneration,
+                    registry: registry,
+                    postEvent: { deliveredEvents.append($0) }
+                )
+            }
+            XCTAssertTrue(deliveredEvents.isEmpty)
             XCTAssertFalse(
                 registry.allowsWindowRegistration(
                     observerKey: observerKey,
@@ -152,18 +154,36 @@ final class AppAXNotificationRemovalTests: XCTestCase {
                 callbackGeneration: callbackGeneration,
                 refcon: refcon,
                 registry: registry,
-                postEvent: { _ in deliveredEvents += 1 }
+                postEvent: { deliveredEvents.append($0) }
             )
-            AppAXContext.handleWindowMiniaturizedCallback(
-                pid: pid + 1,
-                element: replacementElement,
-                observerKey: observerKey,
-                callbackGeneration: callbackGeneration,
-                refcon: refcon,
-                registry: registry,
-                postEvent: { _ in deliveredEvents += 1 }
-            )
-            XCTAssertEqual(deliveredEvents, 2)
+            for minimized in [true, false] {
+                AppAXContext.handleWindowMinimizedCallback(
+                    pid: pid + 1,
+                    axRef: AXWindowRef(element: replacementElement, windowId: windowId),
+                    minimized: minimized,
+                    observerKey: observerKey,
+                    callbackGeneration: callbackGeneration,
+                    registry: registry,
+                    postEvent: { deliveredEvents.append($0) }
+                )
+            }
+            XCTAssertEqual(deliveredEvents.count, 3)
+            guard deliveredEvents.count == 3,
+                  case let .axWindow(.windowMiniaturized(minimizedPID, minimizedRef, minimizedGeneration)) =
+                  deliveredEvents[1],
+                  case let .axWindow(.windowDeminiaturized(restoredPID, restoredRef, restoredGeneration)) =
+                  deliveredEvents[2]
+            else {
+                return XCTFail("Expected both minimization lifecycle events")
+            }
+            XCTAssertEqual(minimizedPID, pid + 1)
+            XCTAssertEqual(restoredPID, pid + 1)
+            XCTAssertEqual(minimizedRef.windowId, windowId)
+            XCTAssertEqual(restoredRef.windowId, windowId)
+            XCTAssertTrue(CFEqual(minimizedRef.element, replacementElement))
+            XCTAssertTrue(CFEqual(restoredRef.element, replacementElement))
+            XCTAssertEqual(minimizedGeneration, callbackGeneration)
+            XCTAssertEqual(restoredGeneration, callbackGeneration)
         }
     }
 }

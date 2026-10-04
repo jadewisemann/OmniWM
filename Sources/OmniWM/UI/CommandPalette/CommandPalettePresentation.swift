@@ -8,29 +8,85 @@ import Observation
 import SwiftUI
 
 enum CommandPalettePresentation {
-    static let unavailableMenuStatusText = "Open the palette while another app is frontmost to search its menus."
+    static let unavailableMenuStatusText =
+        String(localized: "Open the palette while another app is frontmost to search its menus.")
 
     struct InlineHint: Equatable {
         let title: String
         let shortcut: String
     }
 
+    enum MarkAction: Equatable {
+        case set
+        case remove
+    }
+
+    static let setMarkShortcut = "⌃⌥⇧M"
+    static let removeMarkShortcut = "⌃⌥⇧R"
+
+    static func availableMarkShortcut(
+        for action: MarkAction,
+        configuredBindings: [HotkeyBinding]
+    ) -> String? {
+        let keyCode = action == .set ? kVK_ANSI_M : kVK_ANSI_R
+        let localBinding = KeyBinding(
+            keyCode: UInt32(keyCode),
+            modifiers: UInt32(controlKey | optionKey | shiftKey)
+        )
+        guard !configuredBindings.contains(where: {
+            $0.binding.chordBinding?.conflicts(with: localBinding) == true
+        }) else { return nil }
+        return action == .set ? setMarkShortcut : removeMarkShortcut
+    }
+
+    static func markAction(
+        forKeyCode keyCode: UInt16,
+        relevantModifiers: NSEvent.ModifierFlags
+    ) -> MarkAction? {
+        guard relevantModifiers == [.control, .option, .shift] else { return nil }
+        return switch keyCode {
+        case UInt16(kVK_ANSI_M):
+            .set
+        case UInt16(kVK_ANSI_R):
+            .remove
+        default:
+            nil
+        }
+    }
+
     static func menuModeAvailable(hasMenuFocusTarget: Bool) -> Bool {
         hasMenuFocusTarget
     }
 
+    static func searchPlaceholder(for mode: CommandPaletteMode) -> String {
+        switch mode {
+        case .windows: String(localized: "Search windows...")
+        case .menu: String(localized: "Search menu items...")
+        case .clipboard: String(localized: "Search clipboard history...")
+        case .commands: String(localized: "Search OmniWM commands...")
+        case .applications: String(localized: "Search applications...")
+        case .files: String(localized: "Search files...")
+        }
+    }
+
     static func availableMenuStatusText(for appName: String?) -> String {
-        "Searching menus in \(appName ?? "Current App")"
+        String(localized: "Searching menus in \(appName ?? String(localized: "Current App"))")
     }
 
     static func modeHint(for mode: CommandPaletteMode) -> InlineHint {
         switch mode {
         case .windows:
-            InlineHint(title: mode.displayName, shortcut: "⌘1")
+            InlineHint(title: mode.localizedDisplayName, shortcut: "⌘1")
         case .menu:
-            InlineHint(title: mode.displayName, shortcut: "⌘2")
+            InlineHint(title: mode.localizedDisplayName, shortcut: "⌘2")
         case .clipboard:
-            InlineHint(title: mode.displayName, shortcut: "⌘3")
+            InlineHint(title: mode.localizedDisplayName, shortcut: "⌘3")
+        case .commands:
+            InlineHint(title: mode.localizedDisplayName, shortcut: "⌘4")
+        case .applications:
+            InlineHint(title: mode.localizedDisplayName, shortcut: "⌘5")
+        case .files:
+            InlineHint(title: mode.localizedDisplayName, shortcut: "⌘6")
         }
     }
 
@@ -49,6 +105,12 @@ enum CommandPalettePresentation {
                 return isMenuModeAvailable ? .menu : nil
             case "3":
                 return .clipboard
+            case "4":
+                return .commands
+            case "5":
+                return .applications
+            case "6":
+                return .files
             default:
                 return nil
             }
@@ -74,26 +136,49 @@ enum CommandPalettePresentation {
 
     static func selectedWindowHint(isSummonRightAvailable: Bool) -> InlineHint? {
         guard isSummonRightAvailable else { return nil }
-        return InlineHint(title: "Summon Right", shortcut: "⇧↩")
+        return InlineHint(title: String(localized: "Summon Right"), shortcut: "⇧↩")
     }
 
-    static func allowsSummonRight(_ item: CommandPaletteWindowItem) -> Bool {
-        !item.isAppHidden
+    static func allowsSummonRight(
+        _ item: CommandPaletteWindowItem,
+        isTiling: Bool,
+        isCurrentWorkspaceEmpty: Bool
+    ) -> Bool {
+        !item.isAppHidden && (isCurrentWorkspaceEmpty || isTiling)
     }
 
     static func windowsStatusText(
         selectedItem: CommandPaletteWindowItem?,
-        isSummonRightAvailable: Bool
+        isSummonRightAvailable: Bool,
+        isSelectedWindowEligibleForSummon: Bool = true,
+        isCurrentWorkspaceEmpty: Bool = false
     ) -> String {
         if selectedItem?.isAppHidden == true {
-            return "Return · Unhide & Focus"
+            return String(localized: "Return · Unhide & Focus")
         }
 
-        let summonText = if isSummonRightAvailable {
-            "Shift-Enter summons right."
+        let summonText = if isCurrentWorkspaceEmpty {
+            String(localized: "Shift-Enter moves here (empty workspace).")
+        } else if !isSelectedWindowEligibleForSummon {
+            String(localized: "Shift-Enter unavailable for this window.")
+        } else if isSummonRightAvailable {
+            String(localized: "Shift-Enter summons right.")
         } else {
-            "Shift-Enter unavailable for this session."
+            String(localized: "Shift-Enter unavailable without an anchor.")
         }
-        return "Enter jumps. \(summonText)"
+        return String(localized: "Enter jumps. \(summonText)")
+    }
+}
+
+extension CommandPaletteMode {
+    var localizedDisplayName: String {
+        switch self {
+        case .windows: String(localized: "Windows")
+        case .menu: String(localized: "Menu")
+        case .clipboard: String(localized: "Clipboard")
+        case .commands: String(localized: "Commands")
+        case .applications: String(localized: "Applications")
+        case .files: String(localized: "Files")
+        }
     }
 }

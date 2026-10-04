@@ -9,7 +9,7 @@ import XCTest
 
 @MainActor
 final class CGSPhantomEventGuardTests: XCTestCase {
-    func testCGSDestroyForParkedTrackedWindowIsIgnored() throws {
+    func testCGSDestroyForParkedTrackedWindowIsIgnored() async throws {
         let controller = Self.controller()
         let workspaceId = try XCTUnwrap(controller.workspaceManager.workspaceId(for: "1", createIfMissing: true))
         _ = controller.workspaceManager.focusWorkspace(named: "1")
@@ -28,17 +28,19 @@ final class CGSPhantomEventGuardTests: XCTestCase {
             ),
             for: token
         )
+        controller.layoutRefreshController.resetState()
 
         controller.axEventHandler.handleCGSEvent(
             .destroyed(windowId: UInt32(token.windowId), spaceId: 0)
         )
+        await controller.axEventHandler.lifecycleQueries.task?.value
 
         XCTAssertNotNil(controller.workspaceManager.entry(for: token))
         XCTAssertNotNil(controller.workspaceManager.hiddenState(for: token))
         XCTAssertEqual(controller.workspaceManager.invariantViolationCountsDump(), "clean")
     }
 
-    func testCGSDestroyForLiveTrackedWindowIsIgnored() throws {
+    func testCGSDestroyForLiveTrackedWindowIsIgnored() async throws {
         let controller = Self.controller()
         let workspaceId = try XCTUnwrap(controller.workspaceManager.workspaceId(for: "1", createIfMissing: true))
         _ = controller.workspaceManager.focusWorkspace(named: "1")
@@ -78,6 +80,7 @@ final class CGSPhantomEventGuardTests: XCTestCase {
         controller.axEventHandler.handleCGSEvent(
             .destroyed(windowId: windowId, spaceId: 0)
         )
+        await controller.axEventHandler.lifecycleQueries.task?.value
 
         XCTAssertNotNil(controller.workspaceManager.entry(for: token))
         XCTAssertNotNil(controller.niriEngine?.findNode(for: token, in: workspaceId))
@@ -88,7 +91,7 @@ final class CGSPhantomEventGuardTests: XCTestCase {
         XCTAssertEqual(controller.workspaceManager.invariantViolationCountsDump(), "clean")
     }
 
-    func testCGSCloseRemovesParkedTrackedWindowDespiteStaleWindowServerInfo() throws {
+    func testCGSCloseRemovesParkedTrackedWindowDespiteStaleWindowServerInfo() async throws {
         let controller = Self.controller()
         let workspaceId = try XCTUnwrap(controller.workspaceManager.workspaceId(for: "1", createIfMissing: true))
         _ = controller.workspaceManager.focusWorkspace(named: "1")
@@ -119,6 +122,7 @@ final class CGSPhantomEventGuardTests: XCTestCase {
         }
 
         controller.axEventHandler.handleCGSEvent(.closed(windowId: windowId))
+        await controller.axEventHandler.lifecycleQueries.task?.value
 
         XCTAssertNil(controller.workspaceManager.entry(for: token))
         XCTAssertNil(controller.workspaceManager.hiddenState(for: token))
@@ -128,13 +132,14 @@ final class CGSPhantomEventGuardTests: XCTestCase {
         controller.axEventHandler.handleCGSEvent(
             .destroyed(windowId: windowId, spaceId: 0)
         )
+        await controller.axEventHandler.lifecycleQueries.task?.value
 
         XCTAssertNil(controller.workspaceManager.entry(for: token))
         XCTAssertNil(controller.niriEngine?.findNode(for: token, in: workspaceId))
         XCTAssertEqual(controller.workspaceManager.invariantViolationCountsDump(), "clean")
     }
 
-    func testNativeFullscreenCGSCloseRetiresAfterTransientDestroy() throws {
+    func testNativeFullscreenCGSCloseRetiresAfterTransientDestroy() async throws {
         let controller = Self.controller()
         let workspaceId = try XCTUnwrap(controller.workspaceManager.workspaceId(for: "1", createIfMissing: true))
         _ = controller.workspaceManager.focusWorkspace(named: "1")
@@ -200,6 +205,7 @@ final class CGSPhantomEventGuardTests: XCTestCase {
         controller.axEventHandler.handleCGSEvent(
             .destroyed(windowId: UInt32(targetToken.windowId), spaceId: fullscreenSpaceId)
         )
+        await controller.axEventHandler.lifecycleQueries.task?.value
 
         let preservedNode = try XCTUnwrap(engine.findNode(for: targetToken, in: workspaceId))
         XCTAssertEqual(preservedNode.id, targetNode.id)
@@ -219,6 +225,7 @@ final class CGSPhantomEventGuardTests: XCTestCase {
         )
 
         controller.axEventHandler.handleCGSEvent(.closed(windowId: UInt32(targetToken.windowId)))
+        await controller.axEventHandler.lifecycleQueries.task?.value
 
         XCTAssertNil(controller.workspaceManager.entry(for: targetToken))
         XCTAssertNil(controller.workspaceManager.nativeFullscreenRecord(for: targetToken))
@@ -244,7 +251,9 @@ final class CGSPhantomEventGuardTests: XCTestCase {
         controller.axEventHandler.handleCGSEvent(
             .destroyed(windowId: UInt32(targetToken.windowId), spaceId: fullscreenSpaceId)
         )
+        await controller.axEventHandler.lifecycleQueries.task?.value
         controller.axEventHandler.handleCGSEvent(.closed(windowId: UInt32(targetToken.windowId)))
+        await controller.axEventHandler.lifecycleQueries.task?.value
 
         XCTAssertNil(controller.workspaceManager.entry(for: targetToken))
         XCTAssertNotNil(controller.workspaceManager.entry(for: peerToken))
@@ -290,10 +299,12 @@ final class CGSPhantomEventGuardTests: XCTestCase {
         controller.axEventHandler.handleCGSEvent(
             .destroyed(windowId: UInt32(targetToken.windowId), spaceId: 0)
         )
+        await controller.axEventHandler.lifecycleQueries.task?.value
         XCTAssertNotNil(controller.workspaceManager.entry(for: targetToken))
         XCTAssertTrue(controller.workspaceManager.markNativeFullscreenSuspended(targetToken))
 
         controller.axEventHandler.handleCGSEvent(.closed(windowId: UInt32(targetToken.windowId)))
+        await controller.axEventHandler.lifecycleQueries.task?.value
 
         XCTAssertNotNil(controller.workspaceManager.entry(for: targetToken))
         XCTAssertNotNil(controller.workspaceManager.nativeFullscreenRecord(for: targetToken))
@@ -360,6 +371,50 @@ final class CGSPhantomEventGuardTests: XCTestCase {
         XCTAssertEqual(controller.workspaceManager.invariantViolationCountsDump(), "clean")
     }
 
+    func testReplacementExpiryRetiresOldWindowWhileCreateMetadataIsUnresolved() async throws {
+        let controller = Self.controller()
+        defer { controller.serviceLifecycleManager.stop() }
+        let handler = controller.axEventHandler
+        let workspaceId = try XCTUnwrap(controller.workspaceManager.workspaceId(for: "1", createIfMissing: true))
+        controller.niriLayoutHandler.enableNiriLayout()
+        let pid: pid_t = 949_301
+        let oldToken = controller.workspaceManager.addWindow(
+            AXWindowRef(element: AXUIElementCreateApplication(pid), windowId: 949_302),
+            pid: pid, windowId: 949_302, to: workspaceId,
+            managedReplacementMetadata: Self.managedReplacementMetadata(
+                workspaceId: workspaceId, pid: pid,
+                frame: CGRect(x: 160, y: 120, width: 720, height: 520)
+            )
+        )
+        let engine = try XCTUnwrap(controller.niriEngine)
+        _ = engine.addWindow(token: oldToken, to: workspaceId, afterSelection: nil)
+        controller.layoutRefreshController.resetState()
+        handler.handleWindowDestroyed(
+            windowId: UInt32(oldToken.windowId), pidHint: pid,
+            evidence: .windowClosed, windowInfo: nil
+        )
+        let key = AXEventHandler.ManagedReplacementKey(pid: pid, workspaceId: workspaceId)
+        XCTAssertTrue(handler.hasPendingManagedReplacementDestroy(oldToken))
+        XCTAssertNotNil(controller.workspaceManager.entry(for: oldToken))
+        let gate = LifecycleQueryGate()
+        defer { gate.resume() }
+        let queryStarted = expectation(description: "Replacement metadata unresolved")
+        handler.lifecycleQueries.query = { _ in
+            queryStarted.fulfill()
+            return await gate.wait()
+        }
+        handler.processCreatedWindow(windowId: 949_303)
+        let task = try XCTUnwrap(handler.lifecycleQueries.task)
+        await fulfillment(of: [queryStarted], timeout: 2)
+        handler.flushManagedReplacementBurst(for: key)
+        XCTAssertNil(controller.workspaceManager.entry(for: oldToken))
+        XCTAssertNil(engine.findNode(for: oldToken, in: workspaceId))
+        XCTAssertFalse(handler.hasPendingManagedReplacementDestroy(oldToken))
+        gate.resume()
+        await task.value
+        XCTAssertEqual(controller.workspaceManager.invariantViolationCountsDump(), "clean")
+    }
+
     func testManagedReplacementAwaitPreservesLateMatchedCreate() async throws {
         let controller = Self.controller()
         let workspaceId = try XCTUnwrap(controller.workspaceManager.workspaceId(for: "1", createIfMissing: true))
@@ -403,8 +458,10 @@ final class CGSPhantomEventGuardTests: XCTestCase {
         controller.axEventHandler.handleCGSEvent(
             .destroyed(windowId: UInt32(oldToken.windowId), spaceId: 0)
         )
+        await controller.axEventHandler.lifecycleQueries.task?.value
         XCTAssertTrue(controller.workspaceManager.markNativeFullscreenSuspended(oldToken))
         controller.axEventHandler.handleCGSEvent(.closed(windowId: UInt32(oldToken.windowId)))
+        await controller.axEventHandler.lifecycleQueries.task?.value
         XCTAssertNotNil(controller.workspaceManager.entry(for: oldToken))
         let desktopSpaceId: UInt64 = 949_201
         controller.workspaceManager.commitSpaceTopology(
@@ -535,7 +592,7 @@ final class CGSPhantomEventGuardTests: XCTestCase {
         XCTAssertNil(controller.workspaceManager.spaceTopology.spaceForWindow(newToken.windowId))
     }
 
-    func testCGSCreateForTrackedWindowVerifiesIdentityWithoutMutation() throws {
+    func testCGSCreateForTrackedWindowVerifiesIdentityWithoutMutation() async throws {
         let controller = Self.controller()
         let workspaceId = try XCTUnwrap(controller.workspaceManager.workspaceId(for: "1", createIfMissing: true))
         _ = controller.workspaceManager.focusWorkspace(named: "1")
@@ -550,6 +607,7 @@ final class CGSPhantomEventGuardTests: XCTestCase {
         controller.axEventHandler.handleCGSEvent(
             .created(windowId: UInt32(token.windowId), spaceId: 0)
         )
+        await controller.axEventHandler.lifecycleQueries.task?.value
 
         let entryAfter = try XCTUnwrap(controller.workspaceManager.entry(for: token))
         XCTAssertTrue(CFEqual(entryAfter.axRef.element, entryBefore.axRef.element))
@@ -564,7 +622,7 @@ final class CGSPhantomEventGuardTests: XCTestCase {
         XCTAssertEqual(controller.workspaceManager.invariantViolationCountsDump(), "clean")
     }
 
-    func testCGSCreateForOwnProcessWindowSchedulesNoRetry() throws {
+    func testCGSCreateForOwnProcessWindowSchedulesNoRetry() async throws {
         let controller = Self.controller()
         let windowId: UInt32 = 943_101
         controller.axEventHandler.windowInfoProvider = { id in
@@ -578,6 +636,7 @@ final class CGSPhantomEventGuardTests: XCTestCase {
         }
 
         controller.axEventHandler.handleCGSEvent(.created(windowId: windowId, spaceId: 0))
+        await controller.axEventHandler.lifecycleQueries.task?.value
 
         let trace = controller.axEventHandler.createFocusTraceDump()
         XCTAssertTrue(trace.contains("create_seen window=\(windowId)"))
@@ -587,7 +646,7 @@ final class CGSPhantomEventGuardTests: XCTestCase {
         XCTAssertEqual(controller.workspaceManager.invariantViolationCountsDump(), "clean")
     }
 
-    func testCGSDestroyForUnmanagedWindowDoesNotScheduleFullRescan() {
+    func testCGSDestroyForUnmanagedWindowDoesNotScheduleFullRescan() async {
         let controller = Self.controller()
         let windowId: UInt32 = 944_101
         controller.axEventHandler.windowInfoProvider = { _ in nil }
@@ -595,6 +654,7 @@ final class CGSPhantomEventGuardTests: XCTestCase {
         controller.axEventHandler.handleCGSEvent(
             .destroyed(windowId: windowId, spaceId: 0)
         )
+        await controller.axEventHandler.lifecycleQueries.task?.value
 
         XCTAssertNil(controller.layoutRefreshController.layoutState.activeRefresh)
         XCTAssertNil(controller.layoutRefreshController.layoutState.pendingRefresh)
@@ -634,7 +694,7 @@ final class CGSPhantomEventGuardTests: XCTestCase {
             ),
             autosaveEnabled: false
         )
-        return WMController(
+        let controller = WMController(
             settings: settings,
             windowFocusOperations: WindowFocusOperations(
                 activateApp: { _ in },
@@ -642,5 +702,8 @@ final class CGSPhantomEventGuardTests: XCTestCase {
                 raiseWindow: { _ in }
             )
         )
+        let handler = controller.axEventHandler
+        handler.lifecycleQueries.query = { [weak handler] in handler?.windowInfoProvider($0) }
+        return controller
     }
 }

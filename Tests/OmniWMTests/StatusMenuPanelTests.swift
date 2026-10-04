@@ -7,21 +7,51 @@ import XCTest
 
 @MainActor
 final class StatusMenuPanelTests: XCTestCase {
+    func testQuitLeavesMenuActionTaskBeforeEnteringAppKitTermination() async {
+        let fixture = makeFixture()
+        defer { fixture.cleanup() }
+        let terminated = expectation(description: "Quit dispatched from the application run loop")
+        let dismiss = StatusMenuDismissAction(dismiss: {})
+        var menuActionReturned = false
+
+        dismiss {
+            fixture.model.quit {
+                XCTAssertTrue(menuActionReturned)
+                terminated.fulfill()
+            }
+            menuActionReturned = true
+        }
+
+        await fulfillment(of: [terminated], timeout: 2)
+    }
+
     func testContentIsCappedToScreenAndAnchoredAtEdges() {
         let screen = CGRect(x: -1280, y: 100, width: 1280, height: 700)
         let size = StatusMenuGeometry.panelSize(
             contentSize: CGSize(width: 280, height: 1200),
             visibleFrame: screen
         )
-        let frame = NonactivatingPanel.frame(
-            anchor: CGPoint(x: screen.maxX, y: screen.maxY),
-            size: size,
-            screenVisibleFrame: screen
-        )
+        let frame = PopupAttachment(anchor: CGPoint(x: screen.maxX, y: screen.maxY))
+            .frame(size: size, visibleFrame: screen)
 
         XCTAssertEqual(size, CGSize(width: 280, height: 684))
         XCTAssertTrue(screen.contains(frame))
         XCTAssertEqual(frame.maxX, screen.maxX - 8)
+    }
+
+    func testBottomMenuScrollsAboveBarOnShortDisplay() throws {
+        let fixture = makeFixture()
+        defer { fixture.cleanup() }
+        var visibleFrame = NSScreen.main?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        visibleFrame.size.height = 200
+        let anchor = CGPoint(x: visibleFrame.midX, y: visibleFrame.minY + 32)
+        fixture.host.show(attachment: PopupAttachment(anchor: anchor, edge: .above), visibleFrame: visibleFrame)
+
+        let panel = try XCTUnwrap(fixture.host.panel)
+        let scrollView = try XCTUnwrap(panel.contentView as? NSScrollView)
+        XCTAssertEqual(panel.frame.minY, anchor.y + 4)
+        XCTAssertTrue(visibleFrame.contains(panel.frame))
+        XCTAssertGreaterThan(try XCTUnwrap(scrollView.documentView).frame.height, scrollView.contentSize.height)
     }
 
     func testSubmenuOpensRightWhenSpaceIsAvailable() {
@@ -335,7 +365,7 @@ private final class StatusMenuPanelFixture {
 
     func show(visibleFrame: CGRect? = nil) {
         let frame = visibleFrame ?? NSScreen.main?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1920, height: 1080)
-        host.show(anchor: CGPoint(x: frame.maxX - 160, y: frame.maxY), visibleFrame: frame)
+        host.show(attachment: PopupAttachment(anchor: CGPoint(x: frame.maxX - 160, y: frame.maxY)), visibleFrame: frame)
     }
 
     func seedSubmenuRows() {

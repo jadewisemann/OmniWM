@@ -97,7 +97,8 @@ struct IntakePerformanceCounters {
         case .cgs(.titleChanged):
             \.cgsTitleChangedEvents
         case .axWindow(.windowDestroyed),
-             .axWindow(.windowMiniaturized):
+             .axWindow(.windowMiniaturized),
+             .axWindow(.windowDeminiaturized):
             \.axLifecycleEvents
         case .axWindow(.focusedWindowChanged):
             \.axFocusedWindowChangedEvents

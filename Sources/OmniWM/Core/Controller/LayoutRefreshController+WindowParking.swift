@@ -14,15 +14,14 @@ extension LayoutRefreshController {
         guard let controller,
               entry.layoutReason == .standard,
               let verifiedFrame = controller.axManager.verifiedParkFrame(for: entry.windowId),
-              abs(observedFrame.minX - verifiedFrame.minX) >= FrameTolerance.frameWrite
-              || abs(observedFrame.minY - verifiedFrame.minY) >= FrameTolerance.frameWrite,
+              !observedFrame.approximatelyEqual(to: verifiedFrame, tolerance: FrameTolerance.frameWrite),
               let monitor = controller.workspaceManager.monitor(for: entry.workspaceId),
               controller.workspaceManager.activeWorkspaceOrFirst(on: monitor.id)?.id != entry.workspaceId
         else { return }
 
         controller.axManager.markParkPending(for: entry.windowId, pid: entry.pid)
 
-        guard !controller.workspaceManager.isAppHidden(pid: entry.pid),
+        guard !controller.workspaceManager.isWindowSuppressedByMacOS(entry.token),
               !controller.axManager.macOSHiddenAppPIDs.contains(entry.pid),
               !controller.workspaceManager.spaceTopology.isWindowOnKnownInactiveSpace(entry.windowId)
         else { return }
@@ -36,13 +35,43 @@ extension LayoutRefreshController {
         )
     }
 
+    func repairLayoutTransientPark(for entry: WindowState, side: HideSide, observedFrame: CGRect) {
+        guard let controller,
+              entry.layoutReason == .standard,
+              let parkFrame = controller.axManager.parkTargetFrame(for: entry.windowId),
+              !observedFrame.size.isWithinFrameTolerance(of: parkFrame.size),
+              let monitor = controller.workspaceManager.monitor(for: entry.workspaceId),
+              let parkOrigin = liveFrameHideOrigin(
+                  for: observedFrame,
+                  monitor: monitor,
+                  side: side,
+                  reason: .layoutTransient
+              ),
+              !observedFrame.approximatelyEqual(
+                  to: CGRect(origin: parkOrigin, size: observedFrame.size),
+                  tolerance: FrameTolerance.frameWrite
+              ),
+              !controller.workspaceManager.isWindowSuppressedByMacOS(entry.token),
+              !controller.axManager.macOSHiddenAppPIDs.contains(entry.pid),
+              !controller.workspaceManager.spaceTopology.isWindowOnKnownInactiveSpace(entry.windowId)
+        else { return }
+
+        hideWindow(
+            entry,
+            monitor: monitor,
+            side: side,
+            reason: .layoutTransient,
+            observedFrame: observedFrame
+        )
+    }
+
     @discardableResult
     func applyPositionPlans(
         _ plans: [WindowPositionPlan],
         deferringVisibleAXFor deferredTokens: Set<WindowToken> = []
     ) -> Set<WindowToken> {
         guard let controller, !plans.isEmpty else { return [] }
-        let plans = plans.filter { !controller.workspaceManager.isAppHidden(pid: $0.entry.pid) }
+        let plans = plans.filter { !controller.workspaceManager.isWindowSuppressedByMacOS($0.entry.token) }
         guard !plans.isEmpty else { return [] }
 
         var requiresVisibleAXTokens = controller.axManager.cancelParkFrameJobs(
@@ -78,10 +107,10 @@ extension LayoutRefreshController {
         animationTick: Bool
     ) {
         guard let controller, !plans.isEmpty else { return }
-        let plans = plans.filter { !controller.workspaceManager.isAppHidden(pid: $0.entry.pid) }
+        let plans = plans.filter { !controller.workspaceManager.isWindowSuppressedByMacOS($0.entry.token) }
         guard !plans.isEmpty else { return }
         let movablePlans = movablePlans.filter {
-            !controller.workspaceManager.isAppHidden(pid: $0.entry.pid)
+            !controller.workspaceManager.isWindowSuppressedByMacOS($0.entry.token)
         }
 
         if animationTick {
@@ -101,7 +130,7 @@ extension LayoutRefreshController {
         if !movablePlans.isEmpty {
             controller.axManager.applyPositionsViaSkyLight(
                 movablePlans.map { SkyLightPositionTarget(token: $0.entry.token, frame: $0.frame) },
-                allowInactive: true
+                allowInactive: true, tracingPark: true
             )
         }
 
@@ -112,7 +141,7 @@ extension LayoutRefreshController {
             FrameApplyTrace.recordEvent(
                 pid: plan.entry.pid,
                 windowId: plan.entry.windowId,
-                outcome: animationTick ? "outcome=sls-parked/animation" : "outcome=sls-parked/settled",
+                outcome: animationTick ? "outcome=sls-park-intent/animation" : "outcome=sls-park-intent/settled",
                 target: plan.frame
             )
         }

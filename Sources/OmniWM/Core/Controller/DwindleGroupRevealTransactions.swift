@@ -139,6 +139,11 @@ final class DwindleGroupRevealTransactions {
         }
     }
 
+    func cancelPendingGroupReveal(for token: WindowToken) {
+        guard pendingGroupRevealTransactionsByWindowId[token.windowId]?.pid == token.pid else { return }
+        pendingGroupRevealTransactionsByWindowId.removeValue(forKey: token.windowId)
+    }
+
     func currentPendingGroupRevealFocusTransactionIds(
         in workspaceId: WorkspaceDescriptor.ID
     ) -> Set<UInt64> {
@@ -235,7 +240,7 @@ extension DwindleGroupRevealTransactions {
               let revealEntry = controller.workspaceManager.entry(for: transaction.token),
               revealEntry.workspaceId == transaction.workspaceId,
               revealEntry.layoutReason == .standard,
-              !controller.workspaceManager.isAppHidden(pid: revealEntry.pid)
+              !controller.workspaceManager.isWindowSuppressedByMacOS(revealEntry.token)
         else {
             return
         }
@@ -302,7 +307,7 @@ extension DwindleGroupRevealTransactions {
                   let entry = controller.workspaceManager.entry(for: change.token),
                   entry.workspaceId == transaction.workspaceId,
                   entry.layoutReason != .nativeFullscreen,
-                  !controller.workspaceManager.isAppHidden(pid: entry.pid)
+                  !controller.workspaceManager.isWindowSuppressedByMacOS(entry.token)
             else {
                 continue
             }
@@ -325,7 +330,7 @@ extension DwindleGroupRevealTransactions {
               let rollbackToken = transaction.hides.lazy.map(\.token).first(where: {
                   engine.tileSnapshot(for: $0, in: transaction.workspaceId)?.id == transaction.tileId
                       && controller.workspaceManager.entry(for: $0)?.layoutReason == .standard
-                      && !controller.workspaceManager.isAppHidden($0)
+                      && !controller.workspaceManager.isWindowSuppressedByMacOS($0)
               })
         else {
             return

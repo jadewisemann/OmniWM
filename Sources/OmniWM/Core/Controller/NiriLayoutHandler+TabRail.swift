@@ -174,7 +174,12 @@ extension NiriLayoutHandler {
         revealSelectedTab(target, workspaceId: workspaceId, engine: engine, controller: controller, state: &state)
         activateNode(
             target, in: workspaceId, state: &state,
-            options: .init(activateWindow: false, ensureVisible: false, startAnimation: false)
+            options: .init(
+                activateWindow: false,
+                ensureVisible: false,
+                focusOrigin: .pointerSelection,
+                startAnimation: false
+            )
         )
         _ = controller.workspaceManager.applySessionPatch(
             .init(
@@ -241,7 +246,7 @@ extension NiriLayoutHandler {
         controller.workspaceManager.withEngineMutationScope {
             if let monitor = controller.workspaceManager.monitor(for: workspaceId) {
                 let gap = controller.innerGap(for: monitor)
-                let workingFrame = controller.insetWorkingFrame(for: monitor)
+                let workingFrame = controller.niriWorkingFrame(for: monitor)
                 engine.ensureSelectionVisible(
                     node: target,
                     context: .init(

@@ -481,7 +481,7 @@ final class ManagedWindowIdentityTests: XCTestCase {
         XCTAssertNil(controller.axEventHandler.admissionRetryStateByWindowId[windowId])
     }
 
-    func testCreatePathKeepsIdentityRebindPendingWithoutDuplicateAdmission() throws {
+    func testCreatePathKeepsIdentityRebindPendingWithoutDuplicateAdmission() async throws {
         let controller = WindowAdmissionTestSupport.controller()
         let workspaceId = try XCTUnwrap(
             controller.workspaceManager.workspaceId(for: "1", createIfMissing: true)
@@ -516,6 +516,7 @@ final class ManagedWindowIdentityTests: XCTestCase {
             fallbackToken: newToken,
             fallbackAXRef: newRef
         )
+        await controller.axEventHandler.lifecycleQueries.task?.value
 
         let state = try XCTUnwrap(controller.axEventHandler.admissionRetryStateByWindowId[windowId])
         guard case let .identityRebind(retryOld, retryNew, _, _, _) = state.trigger else {

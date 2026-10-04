@@ -65,6 +65,9 @@ extension LayoutRefreshController {
         context: FullRescanMutationContext
     ) {
         let controller = context.controller
+        guard controller.workspaceManager.entry(for: admittedToken)?.observedState.isMinimized != true else {
+            return
+        }
         let candidate = window.candidate
         let oldMode = admission.refreshedEntry?.mode
         let wsForWindow = admission.assignment.workspaceId
