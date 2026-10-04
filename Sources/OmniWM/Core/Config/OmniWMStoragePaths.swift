@@ -30,12 +30,13 @@ struct OmniWMStoragePaths: Equatable {
         default:
             directoryName = "omniwm"
         }
+        let configDirectoryName = bundleIdentifier == "com.barut.OmniWM.dev" ? "omniwm-dev" : "omniwm"
         return OmniWMStoragePaths(
             configDirectory: directory(
                 environmentKey: "XDG_CONFIG_HOME",
                 fallbackBase: homeDirectory.appendingPathComponent(".config", isDirectory: true),
                 environment: environment,
-                directoryName: directoryName
+                directoryName: configDirectoryName
             ),
             stateDirectory: directory(
                 environmentKey: "XDG_STATE_HOME",

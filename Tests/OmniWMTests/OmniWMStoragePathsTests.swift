@@ -22,7 +22,8 @@ final class OmniWMStoragePathsTests: XCTestCase {
                 homeDirectory: home,
                 bundleIdentifier: bundleIdentifier
             )
-            XCTAssertEqual(paths.configDirectory.path, "/Users/contributor/.config/\(directory)")
+            let configDirectory = directory == "omniwm-pebble" ? "omniwm" : directory
+            XCTAssertEqual(paths.configDirectory.path, "/Users/contributor/.config/\(configDirectory)")
             XCTAssertEqual(paths.stateDirectory.path, "/Users/contributor/.local/state/\(directory)")
             XCTAssertEqual(paths.diagnosticsDirectory.path, "/Users/contributor/.local/state/\(directory)/diagnostics")
         }
@@ -40,7 +41,8 @@ final class OmniWMStoragePathsTests: XCTestCase {
                 bundleIdentifier: bundleIdentifier
             )
 
-            XCTAssertEqual(paths.configDirectory.path, "/custom/config/\(directory)")
+            let configDirectory = directory == "omniwm-pebble" ? "omniwm" : directory
+            XCTAssertEqual(paths.configDirectory.path, "/custom/config/\(configDirectory)")
             XCTAssertEqual(paths.stateDirectory.path, "/custom/state/\(directory)")
         }
     }

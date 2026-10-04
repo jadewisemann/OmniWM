@@ -6,9 +6,9 @@
 
 Install `OmniWM Pebble.app` beside `OmniWM.app`, then quit one before starting the other. The existing launch conflict check prevents both window managers from controlling the same desktop at once.
 
-Pebble uses bundle ID `com.jadewisemann.OmniWM.Pebble`, settings in `~/.config/omniwm-pebble/`, state in `~/.local/state/omniwm-pebble/`, and its own IPC socket in `~/Library/Caches/com.jadewisemann.OmniWM.Pebble/`. XDG config/state overrides still apply. The optional CLI link is `omniwm-pebblectl`; the official `omniwmctl` is preserved. Both the bundled CLI and this link connect to Pebble by default.
+Pebble uses bundle ID `com.jadewisemann.OmniWM.Pebble`, shared settings in `~/.config/omniwm/`, state in `~/.local/state/omniwm-pebble/`, and its own IPC socket in `~/Library/Caches/com.jadewisemann.OmniWM.Pebble/`. XDG config/state overrides still apply. The optional CLI link is `omniwm-pebblectl`; the official `omniwmctl` is preserved. Both the bundled CLI and this link connect to Pebble by default.
 
-Pebble starts with separate settings and requires its own Accessibility permission. To reuse your existing settings, copy `~/.config/omniwm/settings.toml` to `~/.config/omniwm-pebble/settings.toml` while Pebble is closed; the original file stays intact. Pebble's **Check for Updates** opens this fork's releases, and automatic official-app update checks are disabled for this bundle.
+Both apps use the same `~/.config/omniwm/settings.toml`, so common settings follow you when switching apps. Pebble writes official-compatible schema 4 and stores its extra monitor-move shortcut under `pebble.hotkeys` in the same file; official v0.7.4 preserves that table. Earlier fork schema-5 files are backed up and converted to the shared format. Runtime state and permissions remain separate; Pebble requires its own Accessibility permission. Pebble's **Check for Updates** opens this fork's releases, and automatic official-app update checks are disabled for this bundle.
 
 # OmniWM
 
