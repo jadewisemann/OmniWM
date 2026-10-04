@@ -25,6 +25,11 @@ final class PebbleCoexistenceTests: XCTestCase {
         var officialKnown = raw
         officialKnown.removeValue(forKey: "pebble")
         var editedByOfficial = officialKnown
+        editedByOfficial["hotkeys"] = .array(hotkeys.map { entry in
+            guard case var .table(row) = entry, row["id"] == .string("focusMonitorNext") else { return entry }
+            row["binding"] = .string("Control+Command+Tab")
+            return .table(row)
+        })
         guard case var .table(gaps) = editedByOfficial["gaps"] else { return XCTFail("Missing gaps") }
         gaps["size"] = .integer(23)
         editedByOfficial["gaps"] = .table(gaps)
@@ -37,6 +42,10 @@ final class PebbleCoexistenceTests: XCTestCase {
         let reloaded = try SettingsTOMLCodec.decodeForLoad(officialData, sharedWithOfficial: true)
         XCTAssertNil(reloaded.migration)
         XCTAssertEqual(reloaded.export.gaps.size, 23)
+        XCTAssertEqual(
+            reloaded.export.hotkeyBindings.first { $0.id == "focusMonitorNext" }?.binding,
+            try XCTUnwrap(HotkeyTrigger.fromHumanReadable("Control+Command+Tab"))
+        )
         XCTAssertTrue(reloaded.export.hotkeyBindings.first { $0.id == "moveWindowToMonitor.next" }?.binding
             .isUnassigned == true)
 

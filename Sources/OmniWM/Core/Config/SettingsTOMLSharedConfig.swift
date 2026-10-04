@@ -38,6 +38,11 @@ enum SettingsTOMLSharedConfig {
             }
             entries.append(contentsOf: forkEntries)
             restored["hotkeys"] = .array(entries)
+            if version == schemaVersion, !forkEntries.isEmpty {
+                // This file already passed the Pebble migration. Respect subsequent
+                // official-app edits, including restoring its old focus shortcut.
+                restored["schemaVersion"] = .integer(Int64(SettingsTOMLCodec.currentSchemaVersion))
+            }
         }
         let encoder = TOMLEncoder()
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
