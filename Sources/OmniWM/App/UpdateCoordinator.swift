@@ -208,6 +208,7 @@ final class UpdateCoordinator: AppUpdateCoordinating {
     }
 
     func startAutomaticChecks() {
+        guard Bundle.main.bundleIdentifier != "com.jadewisemann.OmniWM.Pebble" else { return }
         guard !automaticChecksStarted else { return }
         automaticChecksStarted = true
 
@@ -217,6 +218,10 @@ final class UpdateCoordinator: AppUpdateCoordinating {
     }
 
     func checkForUpdatesManually() {
+        if Bundle.main.bundleIdentifier == "com.jadewisemann.OmniWM.Pebble" {
+            openURL(URL(string: "https://github.com/jadewisemann/OmniWM/releases")!)
+            return
+        }
         if let knownRelease = currentKnownAvailableRelease() {
             showUpdatePopup(for: knownRelease, source: .manual)
             return

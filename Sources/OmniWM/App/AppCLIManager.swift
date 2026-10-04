@@ -133,7 +133,7 @@ final class AppCLIManager {
 
     private func preferredUserLinkURL() -> URL {
         preferredUserBinDirectory()
-            .appendingPathComponent("omniwmctl", isDirectory: false)
+            .appendingPathComponent("omniwm-pebblectl", isDirectory: false)
     }
 
     private func preferredUserBinDirectory() -> URL {

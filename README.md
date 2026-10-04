@@ -1,6 +1,14 @@
-> **Personal fork:** This repository combines official OmniWM v0.7.4 with the monitor shortcuts below. Download this fork's builds from [jadewisemann/OmniWM Releases](https://github.com/jadewisemann/OmniWM/releases). Fork app archives are ad-hoc development-signed and are not Apple-notarized; macOS may require approval in Privacy & Security and renewed Accessibility access. Official signed and notarized releases remain available from [OmniNull/OmniWM](https://github.com/OmniNull/OmniWM/releases).
+> **OmniWM Pebble — personal fork:** This repository combines official OmniWM v0.7.4 with the monitor shortcuts below. Download `OmniWM Pebble.app` from [jadewisemann/OmniWM Releases](https://github.com/jadewisemann/OmniWM/releases). Fork app archives are ad-hoc development-signed and are not Apple-notarized; macOS may require approval in Privacy & Security and renewed Accessibility access. Official signed and notarized releases remain available from [OmniNull/OmniWM](https://github.com/OmniNull/OmniWM/releases).
 >
 > GitHub Actions packages an arm64 app ZIP after verification and tests succeed. The app archive, SHA-256 checksum, and source commit are available in the `omniwm-fork-app` artifact; publishing a GitHub Release is a separate step.
+
+## Using Pebble alongside the official app
+
+Install `OmniWM Pebble.app` beside `OmniWM.app`, then quit one before starting the other. The existing launch conflict check prevents both window managers from controlling the same desktop at once.
+
+Pebble uses bundle ID `com.jadewisemann.OmniWM.Pebble`, settings in `~/.config/omniwm-pebble/`, state in `~/.local/state/omniwm-pebble/`, and its own IPC socket in `~/Library/Caches/com.jadewisemann.OmniWM.Pebble/`. XDG config/state overrides still apply. The optional CLI link is `omniwm-pebblectl`; the official `omniwmctl` is preserved. Both the bundled CLI and this link connect to Pebble by default.
+
+Pebble starts with separate settings and requires its own Accessibility permission. To reuse your existing settings, copy `~/.config/omniwm/settings.toml` to `~/.config/omniwm-pebble/settings.toml` while Pebble is closed; the original file stays intact. Pebble's **Check for Updates** opens this fork's releases, and automatic official-app update checks are disabled for this bundle.
 
 # OmniWM
 

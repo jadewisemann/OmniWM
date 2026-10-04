@@ -12,7 +12,8 @@ final class OmniWMStoragePathsTests: XCTestCase {
             (nil, "omniwm"),
             ("com.barut.OmniWM", "omniwm"),
             ("com.example.Other.dev", "omniwm"),
-            ("com.barut.OmniWM.dev", "omniwm-dev")
+            ("com.barut.OmniWM.dev", "omniwm-dev"),
+            ("com.jadewisemann.OmniWM.Pebble", "omniwm-pebble")
         ]
 
         for (bundleIdentifier, directory) in cases {
@@ -28,7 +29,11 @@ final class OmniWMStoragePathsTests: XCTestCase {
     }
 
     func testAbsoluteXDGOverridesKeepReleaseAndDevSeparate() {
-        for (bundleIdentifier, directory) in [("com.barut.OmniWM", "omniwm"), ("com.barut.OmniWM.dev", "omniwm-dev")] {
+        for (bundleIdentifier, directory) in [
+            ("com.barut.OmniWM", "omniwm"),
+            ("com.barut.OmniWM.dev", "omniwm-dev"),
+            ("com.jadewisemann.OmniWM.Pebble", "omniwm-pebble")
+        ] {
             let paths = OmniWMStoragePaths.resolve(
                 environment: ["XDG_CONFIG_HOME": "/custom/config/", "XDG_STATE_HOME": "/custom/state/"],
                 homeDirectory: URL(fileURLWithPath: "/Users/contributor", isDirectory: true),

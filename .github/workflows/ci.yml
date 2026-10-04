@@ -132,11 +132,12 @@ jobs:
         run: ./Scripts/package-app.sh release dev
       - name: Create app archive and checksums
         run: |
-          VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' dist/OmniWM.app/Contents/Info.plist)
+          APP="dist/OmniWM Pebble.app"
+          VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]
-          ARCHIVE="OmniWM-v${VERSION}-fork.${GITHUB_RUN_NUMBER}-arm64.zip"
+          ARCHIVE="OmniWM-Pebble-v${VERSION}-fork.${GITHUB_RUN_NUMBER}-arm64.zip"
           mkdir -p release-assets
-          ditto -c -k --keepParent dist/OmniWM.app "release-assets/$ARCHIVE"
+          ditto -c -k --keepParent "$APP" "release-assets/$ARCHIVE"
           (cd release-assets && shasum -a 256 "$ARCHIVE" > SHA256SUMS)
           git rev-parse HEAD > release-assets/source-commit.txt
       - uses: actions/upload-artifact@v7.0.1
