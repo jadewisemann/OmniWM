@@ -6,20 +6,13 @@ import TOML
 
 enum SettingsTOMLCodec {
     static let currentSchemaVersion = 5
-    static var sharesOfficialConfig: Bool {
-        Bundle.main.bundleIdentifier == "com.jadewisemann.OmniWM.Pebble"
+
+    static func encode(_ export: SettingsExport) throws -> Data {
+        try encodeCanonical(export)
     }
 
-    static func encode(_ export: SettingsExport, sharedWithOfficial: Bool = sharesOfficialConfig) throws -> Data {
-        try encodeCanonical(export, sharedWithOfficial: sharedWithOfficial)
-    }
-
-    static func encode(
-        _ export: SettingsExport,
-        preservingUnknownKeysFrom previous: Data?,
-        sharedWithOfficial: Bool = sharesOfficialConfig
-    ) throws -> Data {
-        let canonicalData = try encodeCanonical(export, sharedWithOfficial: sharedWithOfficial)
+    static func encode(_ export: SettingsExport, preservingUnknownKeysFrom previous: Data?) throws -> Data {
+        let canonicalData = try encodeCanonical(export)
         guard let previous else { return canonicalData }
 
         let decoder = TOMLDecoder()
@@ -27,9 +20,8 @@ enum SettingsTOMLCodec {
         let oldRawTree: [String: TOMLNode]
         let oldExport: SettingsExport
         do {
-            let previousTree = try decoder.decode([String: TOMLNode].self, from: previous)
-            oldRawTree = sharedWithOfficial ? SettingsTOMLSharedConfig.sharedTree(previousTree) : previousTree
-            oldExport = try decode(previous, sharedWithOfficial: sharedWithOfficial)
+            oldRawTree = try decoder.decode([String: TOMLNode].self, from: previous)
+            oldExport = try decode(previous)
         } catch let error as SettingsTOMLCodecError {
             if case .unsupportedSchemaVersion = error {
                 throw error
@@ -40,7 +32,7 @@ enum SettingsTOMLCodec {
         }
         let oldSchemaKnownTree = try decoder.decode(
             [String: TOMLNode].self,
-            from: encodeCanonical(oldExport, sharedWithOfficial: sharedWithOfficial)
+            from: encodeCanonical(oldExport)
         )
 
         let merged = try TOMLNode.mergeUnknownKeys(
@@ -55,7 +47,7 @@ enum SettingsTOMLCodec {
         return try encoder.encode(merged)
     }
 
-    private static func encodeCanonical(_ export: SettingsExport, sharedWithOfficial: Bool) throws -> Data {
+    private static func encodeCanonical(_ export: SettingsExport) throws -> Data {
         let activeHyperKeyModifiers = HyperKeyModifiers(carbonMask: KeySymbolMapper.hyperModifiers) ?? .default
         KeySymbolMapper.setHyperKeyModifiers(export.hyperKeyModifiers)
         defer { KeySymbolMapper.setHyperKeyModifiers(activeHyperKeyModifiers) }
@@ -63,29 +55,20 @@ enum SettingsTOMLCodec {
         let canonical = CanonicalTOMLConfig(export: export)
         let encoder = TOMLEncoder()
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
-        let data = try encoder.encode(canonical)
-        guard sharedWithOfficial else { return data }
-        let raw = try TOMLDecoder().decode([String: TOMLNode].self, from: data)
-        return try encoder.encode(SettingsTOMLSharedConfig.sharedTree(raw))
+        return try encoder.encode(canonical)
     }
 
-    static func decode(_ data: Data, sharedWithOfficial: Bool = sharesOfficialConfig) throws -> SettingsExport {
-        try decodeForLoad(data, sharedWithOfficial: sharedWithOfficial).export
+    static func decode(_ data: Data) throws -> SettingsExport {
+        try decodeForLoad(data).export
     }
 
-    static func decodeForLoad(
-        _ data: Data,
-        sharedWithOfficial: Bool = sharesOfficialConfig
-    ) throws -> SettingsTOMLDecodeResult {
+    static func decodeForLoad(_ data: Data) throws -> SettingsTOMLDecodeResult {
         let activeHyperKeyModifiers = HyperKeyModifiers(carbonMask: KeySymbolMapper.hyperModifiers) ?? .default
         defer { KeySymbolMapper.setHyperKeyModifiers(activeHyperKeyModifiers) }
 
         let decoder = TOMLDecoder()
         var raw = try decoder.decode([String: TOMLNode].self, from: data)
         let version = try schemaVersion(in: raw)
-        if sharedWithOfficial {
-            return try SettingsTOMLSharedConfig.decodeForLoad(raw, version: version)
-        }
         guard version <= currentSchemaVersion else {
             throw SettingsTOMLCodecError.unsupportedSchemaVersion(
                 found: version,
@@ -115,10 +98,7 @@ enum SettingsTOMLCodec {
         do {
             let decoder = TOMLDecoder()
             let raw = try decoder.decode([String: TOMLNode].self, from: data)
-            let known = try decoder.decode(
-                [String: TOMLNode].self,
-                from: encodeCanonical(decode(data), sharedWithOfficial: sharesOfficialConfig)
-            )
+            let known = try decoder.decode([String: TOMLNode].self, from: encodeCanonical(decode(data)))
             return TOMLNode.unknownKeyPaths(raw: raw, known: known, prefix: "").sorted()
         } catch {
             return []

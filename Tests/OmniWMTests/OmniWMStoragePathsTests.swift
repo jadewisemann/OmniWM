@@ -12,8 +12,7 @@ final class OmniWMStoragePathsTests: XCTestCase {
             (nil, "omniwm"),
             ("com.barut.OmniWM", "omniwm"),
             ("com.example.Other.dev", "omniwm"),
-            ("com.barut.OmniWM.dev", "omniwm-dev"),
-            ("com.jadewisemann.OmniWM.Pebble", "omniwm-pebble")
+            ("com.barut.OmniWM.dev", "omniwm-dev")
         ]
 
         for (bundleIdentifier, directory) in cases {
@@ -22,27 +21,21 @@ final class OmniWMStoragePathsTests: XCTestCase {
                 homeDirectory: home,
                 bundleIdentifier: bundleIdentifier
             )
-            let configDirectory = directory == "omniwm-pebble" ? "omniwm" : directory
-            XCTAssertEqual(paths.configDirectory.path, "/Users/contributor/.config/\(configDirectory)")
+            XCTAssertEqual(paths.configDirectory.path, "/Users/contributor/.config/\(directory)")
             XCTAssertEqual(paths.stateDirectory.path, "/Users/contributor/.local/state/\(directory)")
             XCTAssertEqual(paths.diagnosticsDirectory.path, "/Users/contributor/.local/state/\(directory)/diagnostics")
         }
     }
 
     func testAbsoluteXDGOverridesKeepReleaseAndDevSeparate() {
-        for (bundleIdentifier, directory) in [
-            ("com.barut.OmniWM", "omniwm"),
-            ("com.barut.OmniWM.dev", "omniwm-dev"),
-            ("com.jadewisemann.OmniWM.Pebble", "omniwm-pebble")
-        ] {
+        for (bundleIdentifier, directory) in [("com.barut.OmniWM", "omniwm"), ("com.barut.OmniWM.dev", "omniwm-dev")] {
             let paths = OmniWMStoragePaths.resolve(
                 environment: ["XDG_CONFIG_HOME": "/custom/config/", "XDG_STATE_HOME": "/custom/state/"],
                 homeDirectory: URL(fileURLWithPath: "/Users/contributor", isDirectory: true),
                 bundleIdentifier: bundleIdentifier
             )
 
-            let configDirectory = directory == "omniwm-pebble" ? "omniwm" : directory
-            XCTAssertEqual(paths.configDirectory.path, "/custom/config/\(configDirectory)")
+            XCTAssertEqual(paths.configDirectory.path, "/custom/config/\(directory)")
             XCTAssertEqual(paths.stateDirectory.path, "/custom/state/\(directory)")
         }
     }

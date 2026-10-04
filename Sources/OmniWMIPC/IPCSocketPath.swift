@@ -17,13 +17,13 @@ public enum IPCSocketPath {
 
         if let cachesDirectory = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first {
             return cachesDirectory
-                .appendingPathComponent("com.jadewisemann.OmniWM.Pebble", isDirectory: true)
+                .appendingPathComponent("com.barut.OmniWM", isDirectory: true)
                 .appendingPathComponent("ipc.sock", isDirectory: false)
                 .path
         }
 
         return NSString(string: NSHomeDirectory())
-            .appendingPathComponent("Library/Caches/com.jadewisemann.OmniWM.Pebble/ipc.sock")
+            .appendingPathComponent("Library/Caches/com.barut.OmniWM/ipc.sock")
     }
 
     public static func secretPath(forSocketPath socketPath: String) -> String {
