@@ -1239,7 +1239,7 @@ final class SettingsMigrationTests: XCTestCase {
             }
             XCTAssertEqual(report.fromVersion, 0)
             XCTAssertNil(backupURL)
-            XCTAssertTrue(reason.contains("Both pre-version-4 settings backup slots are occupied"))
+            XCTAssertTrue(reason.contains("Both pre-version-5 settings backup slots are occupied"))
             XCTAssertTrue(persistence.settingsWritesBlocked)
             XCTAssertEqual(try Data(contentsOf: settingsURL(in: fixture)), original)
             XCTAssertThrowsError(try persistence.saveImmediately(export)) { error in
@@ -1269,8 +1269,8 @@ final class SettingsMigrationTests: XCTestCase {
             return XCTFail("Expected unsupported version notice")
         }
 
-        XCTAssertEqual(found, 5)
-        XCTAssertEqual(supported, 4)
+        XCTAssertEqual(found, 6)
+        XCTAssertEqual(supported, 5)
         XCTAssertEqual(outcome.export, SettingsExport.defaults())
         XCTAssertTrue(persistence.settingsWritesBlocked)
         XCTAssertEqual(try Data(contentsOf: settingsURL(in: fixture)), future)
@@ -1312,8 +1312,8 @@ final class SettingsMigrationTests: XCTestCase {
         else {
             return XCTFail("Expected unsupported-version save notice")
         }
-        XCTAssertEqual(found, 5)
-        XCTAssertEqual(supported, 4)
+        XCTAssertEqual(found, 6)
+        XCTAssertEqual(supported, 5)
         XCTAssertTrue(settings.settingsWritesBlocked)
         XCTAssertEqual(noticeChanges, 1)
         XCTAssertEqual(try Data(contentsOf: settingsURL(in: fixture)), future)
@@ -1349,7 +1349,7 @@ final class SettingsMigrationTests: XCTestCase {
         }
         XCTAssertEqual(report.fromVersion, 0)
         XCTAssertNil(backupURL)
-        XCTAssertTrue(reason.contains("Both pre-version-4 settings backup slots are occupied"))
+        XCTAssertTrue(reason.contains("Both pre-version-5 settings backup slots are occupied"))
         XCTAssertTrue(settings.settingsWritesBlocked)
         XCTAssertEqual(noticeChanges, 1)
         XCTAssertEqual(try Data(contentsOf: settingsURL(in: fixture)), legacy)

@@ -154,11 +154,13 @@ final class CommandPaletteFocusTests: XCTestCase {
         fixture.palette.selectMode(.clipboard)
         fixture.layout()
         let initialFrame = panel.frame
+        let visibleFrame = try XCTUnwrap(panel.screen).visibleFrame
+        let requestedSize = NSSize(width: initialFrame.width + 40, height: initialFrame.height + 32)
         let requestedFrame = NSRect(
-            x: initialFrame.minX + 24,
-            y: initialFrame.minY + 20,
-            width: initialFrame.width + 40,
-            height: initialFrame.height + 32
+            x: max(visibleFrame.minX, min(initialFrame.minX + 24, visibleFrame.maxX - requestedSize.width)),
+            y: max(visibleFrame.minY, min(initialFrame.minY + 20, visibleFrame.maxY - requestedSize.height)),
+            width: requestedSize.width,
+            height: requestedSize.height
         )
         panel.setFrame(requestedFrame, display: true)
         fixture.layout()
