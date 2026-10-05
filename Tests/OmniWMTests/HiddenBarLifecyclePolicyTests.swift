@@ -201,7 +201,6 @@ final class HiddenBarLifecyclePolicyTests: XCTestCase {
         hiddenBar.setup()
 
         hiddenBar.observation.enqueueRunningApplicationsChangedForTests()
-        await Task.yield()
         hiddenBar.cleanup()
         for _ in 0 ..< 8 {
             await Task.yield()
