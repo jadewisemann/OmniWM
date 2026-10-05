@@ -195,12 +195,13 @@ struct NiriLayoutViewport {
         // Keep the visible part of an edge column, even when its overflow reaches another display.
         if !containerIntersectsViewport(renderedRect, viewportFrame: area.workingFrame),
            let overflowEdge = NiriMonitorPlaneGeometry.overflowEdgeIntersectingNeighboringMonitor(
-            renderedRect,
-            viewportFrame: area.workingFrame,
-            orientation: orientation,
-            hiddenPlacementMonitor: hiddenPlacementMonitor,
-            hiddenPlacementMonitors: hiddenPlacementMonitors
-        ) {
+               renderedRect,
+               viewportFrame: area.workingFrame,
+               orientation: orientation,
+               hiddenPlacementMonitor: hiddenPlacementMonitor,
+               hiddenPlacementMonitors: hiddenPlacementMonitors
+           )
+        {
             return .hidden(overflowEdge)
         }
         return .visible
