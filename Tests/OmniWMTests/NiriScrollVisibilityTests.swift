@@ -295,18 +295,60 @@ final class NiriScrollVisibilityTests: XCTestCase {
         XCTAssertEqual(handles[fixture.tokens[4]], .right)
     }
 
-    func testVerticalLiveOverflowOntoUpperNeighborStaysHiddenDuringSettledReveal() {
+    func testVerticalLiveOverflowOntoUpperNeighborKeepsVisiblePortionDuringSettledReveal() {
         let fixture = makeVerticalNeighborFixture(neighborY: 800)
         let layout = verticalNeighborLayout(fixture, liveOffset: -200)
 
-        XCTAssertEqual(layout.hiddenHandles[fixture.tokens[0]], .right)
+        XCTAssertNil(layout.hiddenHandles[fixture.tokens[0]])
     }
 
-    func testVerticalLiveOverflowOntoLowerNeighborStaysHiddenDuringSettledReveal() {
+    func testCenteredColumnKeepsBothSideSliversVisibleWithNeighboringDisplays() throws {
+        let fixture = makeFiveColumnFixture()
+        for column in fixture.engine.columns(in: fixture.workspaceId) {
+            column.cachedWidth = 500
+        }
+        let monitors = [-1_000, 0, 1_000].enumerated().map { index, x in
+            let frame = CGRect(x: CGFloat(x), y: 0, width: 1_000, height: 800)
+            return HiddenPlacementMonitorContext(
+                id: .init(displayId: UInt32(index + 1)),
+                frame: frame,
+                visibleFrame: frame
+            )
+        }
+        let layout = fixture.engine.calculateLayoutWithVisibility(
+            state: ViewportState(),
+            workspaceId: fixture.workspaceId,
+            monitorFrame: fixture.area.workingFrame,
+            screenFrame: fixture.area.viewFrame,
+            gaps: (horizontal: 0, vertical: 0),
+            scale: 1,
+            workingArea: fixture.area,
+            orientation: .horizontal,
+            hiddenPlacementMonitor: monitors[1],
+            hiddenPlacementMonitors: monitors,
+            viewOffsetOverride: 750
+        )
+
+        let center = try XCTUnwrap(layout.frames[fixture.tokens[2]])
+        let left = try XCTUnwrap(layout.frames[fixture.tokens[1]])
+        let right = try XCTUnwrap(layout.frames[fixture.tokens[3]])
+        XCTAssertEqual(center.midX, fixture.area.workingFrame.midX)
+        XCTAssertLessThan(left.minX, fixture.area.workingFrame.minX)
+        XCTAssertGreaterThan(left.maxX, fixture.area.workingFrame.minX)
+        XCTAssertLessThan(right.minX, fixture.area.workingFrame.maxX)
+        XCTAssertGreaterThan(right.maxX, fixture.area.workingFrame.maxX)
+        for index in 1 ... 3 {
+            XCTAssertNil(layout.hiddenHandles[fixture.tokens[index]])
+        }
+        XCTAssertEqual(layout.hiddenHandles[fixture.tokens[0]], .left)
+        XCTAssertEqual(layout.hiddenHandles[fixture.tokens[4]], .right)
+    }
+
+    func testVerticalLiveOverflowOntoLowerNeighborKeepsVisiblePortionDuringSettledReveal() {
         let fixture = makeVerticalNeighborFixture(neighborY: -800)
         let layout = verticalNeighborLayout(fixture, liveOffset: 200)
 
-        XCTAssertEqual(layout.hiddenHandles[fixture.tokens[0]], .left)
+        XCTAssertNil(layout.hiddenHandles[fixture.tokens[0]])
     }
 
     func testVerticalPlaneClampedUpperOverflowStaysHiddenDuringSettledReveal() {
@@ -368,10 +410,10 @@ final class NiriScrollVisibilityTests: XCTestCase {
         )
     }
 
-    func testHorizontalNeighborOverflowStaysHiddenWhileOpenEdgesRemainVisible() throws {
-        let scenarios: [(neighborX: CGFloat, liveOffset: CGFloat, side: HideSide)] = [
-            (1_000, -200, .right),
-            (-1_000, 200, .left)
+    func testHorizontalNeighborOverflowKeepsVisiblePortionLikeOpenEdges() throws {
+        let scenarios: [(neighborX: CGFloat, liveOffset: CGFloat)] = [
+            (1_000, -200),
+            (-1_000, 200)
         ]
 
         for scenario in scenarios {
@@ -380,10 +422,7 @@ final class NiriScrollVisibilityTests: XCTestCase {
                 neighboringFixture,
                 liveOffset: scenario.liveOffset
             )
-            XCTAssertEqual(
-                neighboringLayout.hiddenHandles[neighboringFixture.tokens[0]],
-                scenario.side
-            )
+            XCTAssertNil(neighboringLayout.hiddenHandles[neighboringFixture.tokens[0]])
 
             let openFixture = makeHorizontalNeighborFixture(neighborX: nil)
             let openLayout = horizontalNeighborLayout(
