@@ -114,7 +114,9 @@ struct NiriLayoutViewport {
             hiddenPlacementMonitor: hiddenPlacementMonitor,
             hiddenPlacementMonitors: hiddenPlacementMonitors
         )
-        if case .visible = visibilityState {
+        if case .visible = visibilityState,
+           !containerIntersectsViewport(visibilityRect, viewportFrame: area.workingFrame)
+        {
             let clampedVisibilityRect = NiriMonitorPlaneGeometry.clampedFrame(
                 visibilityRect,
                 screenClampRect: area.viewFrame,
@@ -190,13 +192,16 @@ struct NiriLayoutViewport {
         ) else {
             return .hidden(defaultHideEdge)
         }
-        if let overflowEdge = NiriMonitorPlaneGeometry.overflowEdgeIntersectingNeighboringMonitor(
-            renderedRect,
-            viewportFrame: area.workingFrame,
-            orientation: orientation,
-            hiddenPlacementMonitor: hiddenPlacementMonitor,
-            hiddenPlacementMonitors: hiddenPlacementMonitors
-        ) {
+        // Keep the visible part of an edge column, even when its overflow reaches another display.
+        if !containerIntersectsViewport(renderedRect, viewportFrame: area.workingFrame),
+           let overflowEdge = NiriMonitorPlaneGeometry.overflowEdgeIntersectingNeighboringMonitor(
+               renderedRect,
+               viewportFrame: area.workingFrame,
+               orientation: orientation,
+               hiddenPlacementMonitor: hiddenPlacementMonitor,
+               hiddenPlacementMonitors: hiddenPlacementMonitors
+           )
+        {
             return .hidden(overflowEdge)
         }
         return .visible
