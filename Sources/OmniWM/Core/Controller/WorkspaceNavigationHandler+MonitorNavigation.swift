@@ -138,15 +138,35 @@ extension WorkspaceNavigationHandler {
 
         _ = controller.workspaceManager.setInteractionMonitor(targetMonitorId)
         let focusToken = controller.resolveAndSetWorkspaceFocusToken(for: targetWorkspace.id)
+        var postLayout: LayoutRefreshController.PostLayoutAction?
+        if let focusToken {
+            if controller.workspaceManager.isHiddenInCorner(focusToken) {
+                if let request = controller.intentLedger.activeManagedRequest {
+                    controller.cancelManagedFocusRequest(request)
+                }
+                let focusIntentId = controller.intentLedger.newestFocusIntentId()
+                postLayout = { [weak controller] in
+                    guard let controller,
+                          controller.intentLedger.newestFocusIntentId() == focusIntentId,
+                          controller.workspaceManager.interactionMonitorId == targetMonitorId,
+                          controller.workspaceManager.activeWorkspaceOrFirst(on: targetMonitorId)?.id
+                          == targetWorkspace.id
+                    else { return }
+                    controller.focusWindow(focusToken)
+                }
+            } else {
+                // The target is already visible, so keyboard focus must not wait for relayout.
+                controller.focusWindow(focusToken)
+            }
+        } else if controller.workspaceManager.entries(in: targetWorkspace.id).isEmpty {
+            clearManagedFocusAfterEmptyWorkspaceSwitch()
+        }
 
         controller.layoutRefreshController.commitWorkspaceTransition(
             affectedWorkspaces: [targetWorkspace.id],
-            reason: .workspaceTransition
-        ) { [weak controller] in
-            if let focusToken {
-                controller?.focusWindow(focusToken)
-            }
-        }
+            reason: .workspaceTransition,
+            postLayout: postLayout
+        )
         return true
     }
 }

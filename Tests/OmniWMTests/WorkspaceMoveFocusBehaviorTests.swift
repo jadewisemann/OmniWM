@@ -700,6 +700,148 @@ final class WorkspaceMoveFocusBehaviorTests: XCTestCase {
         }
     }
 
+    func testMonitorCycleImmediatelyFocusesRememberedWindowAndSupersedesPendingSourceFocus() throws {
+        for layout in [LayoutType.niri, .dwindle] {
+            let fixture = try makeMonitorMoveFixture(layout: layout, followsFocus: false)
+            let controller = fixture.controller
+            let manager = controller.workspaceManager
+            let source = try addManagedWindow(
+                pid: 488_210, windowId: 1, to: fixture.sourceWorkspaceId, controller: controller
+            )
+            let target = try addManagedWindow(
+                pid: 488_211, windowId: 2, to: fixture.activeTargetWorkspaceId, controller: controller
+            )
+            _ = try addManagedWindow(
+                pid: 488_212, windowId: 3, to: fixture.activeTargetWorkspaceId, controller: controller
+            )
+            _ = try addManagedWindow(
+                pid: 488_213, windowId: 4, to: fixture.inactiveTargetWorkspaceId, controller: controller
+            )
+            try select(
+                target, in: fixture.activeTargetWorkspaceId, on: fixture.targetMonitor,
+                controller: controller, focusRecorder: fixture.focusRecorder
+            )
+            try select(
+                source, in: fixture.sourceWorkspaceId, on: fixture.sourceMonitor,
+                controller: controller, focusRecorder: fixture.focusRecorder
+            )
+            let sourceRequest = try XCTUnwrap(controller.focusWindow(source.id))
+            fixture.focusRecorder.focusedTokens.removeAll()
+
+            try withBlockedLayoutRefreshes(
+                controller: controller, affectedWorkspaceId: fixture.sourceWorkspaceId
+            ) {
+                XCTAssertEqual(controller.commandHandler.performCommand(.monitorFocus(.next)), .executed)
+                XCTAssertEqual(manager.interactionMonitorId, fixture.targetMonitor.id)
+                XCTAssertEqual(fixture.focusRecorder.focusedTokens, [target.id])
+                XCTAssertEqual(manager.pendingFocusedToken, target.id)
+                XCTAssertEqual(controller.intentLedger.activeManagedRequest?.token, target.id)
+                XCTAssertNil(controller.intentLedger.activeManagedRequest(requestId: sourceRequest.requestId))
+
+                XCTAssertEqual(controller.commandHandler.performCommand(.monitorFocus(.previous)), .executed)
+                XCTAssertEqual(manager.interactionMonitorId, fixture.sourceMonitor.id)
+                XCTAssertEqual(fixture.focusRecorder.focusedTokens, [target.id, source.id])
+                XCTAssertEqual(manager.pendingFocusedToken, source.id)
+
+                XCTAssertEqual(controller.commandHandler.performCommand(.monitorFocus(.next)), .executed)
+                XCTAssertEqual(manager.interactionMonitorId, fixture.targetMonitor.id)
+                XCTAssertEqual(fixture.focusRecorder.focusedTokens, [target.id, source.id, target.id])
+                XCTAssertEqual(manager.pendingFocusedToken, target.id)
+                let requestId = try XCTUnwrap(controller.intentLedger.activeManagedRequest?.requestId)
+                let pending = try XCTUnwrap(controller.layoutRefreshController.layoutState.pendingRefresh)
+                for action in pending.postLayoutActions {
+                    action.runIfCurrent(using: manager)
+                }
+                XCTAssertEqual(fixture.focusRecorder.focusedTokens, [target.id, source.id, target.id])
+                XCTAssertEqual(controller.intentLedger.activeManagedRequest?.requestId, requestId)
+            }
+        }
+    }
+
+    func testMonitorCycleToEmptyWorkspaceClearsPendingSourceFocusImmediately() throws {
+        let fixture = try makeMonitorMoveFixture(layout: .niri, followsFocus: false)
+        let controller = fixture.controller
+        let manager = controller.workspaceManager
+        let source = try addManagedWindow(
+            pid: 488_214, windowId: 1, to: fixture.sourceWorkspaceId, controller: controller
+        )
+        try select(
+            source, in: fixture.sourceWorkspaceId, on: fixture.sourceMonitor,
+            controller: controller, focusRecorder: fixture.focusRecorder
+        )
+        _ = try XCTUnwrap(controller.focusWindow(source.id))
+        fixture.focusRecorder.focusedTokens.removeAll()
+
+        try withBlockedLayoutRefreshes(
+            controller: controller, affectedWorkspaceId: fixture.sourceWorkspaceId
+        ) {
+            XCTAssertEqual(controller.commandHandler.performCommand(.monitorFocus(.next)), .executed)
+
+            XCTAssertEqual(manager.interactionMonitorId, fixture.targetMonitor.id)
+            XCTAssertNil(manager.pendingFocusedToken)
+            XCTAssertNil(controller.intentLedger.activeManagedRequest)
+            XCTAssertEqual(manager.nativeFocusOwner, .none)
+            XCTAssertTrue(fixture.focusRecorder.focusedTokens.isEmpty)
+            let pending = try XCTUnwrap(controller.layoutRefreshController.layoutState.pendingRefresh)
+            XCTAssertTrue(pending.postLayoutActions.isEmpty)
+        }
+    }
+
+    func testMonitorCycleWaitsForHiddenWindowRevealAndDoesNotReplayAfterLeaving() throws {
+        let fixture = try makeMonitorMoveFixture(layout: .niri, followsFocus: false)
+        let controller = fixture.controller
+        let manager = controller.workspaceManager
+        let source = try addManagedWindow(
+            pid: 488_215, windowId: 1, to: fixture.sourceWorkspaceId, controller: controller
+        )
+        let target = try addManagedWindow(
+            pid: 488_216, windowId: 2, to: fixture.activeTargetWorkspaceId, controller: controller
+        )
+        try select(
+            source, in: fixture.sourceWorkspaceId, on: fixture.sourceMonitor,
+            controller: controller, focusRecorder: fixture.focusRecorder
+        )
+        manager.setHiddenState(
+            HiddenState(
+                proportionalPosition: .zero, referenceMonitorId: fixture.targetMonitor.id,
+                reason: .workspaceInactive
+            ),
+            for: target.id
+        )
+        _ = try XCTUnwrap(controller.focusWindow(source.id))
+        fixture.focusRecorder.focusedTokens.removeAll()
+
+        try withBlockedLayoutRefreshes(
+            controller: controller, affectedWorkspaceId: fixture.sourceWorkspaceId
+        ) {
+            XCTAssertEqual(controller.commandHandler.performCommand(.monitorFocus(.next)), .executed)
+            XCTAssertTrue(fixture.focusRecorder.focusedTokens.isEmpty)
+            XCTAssertNil(controller.intentLedger.activeManagedRequest)
+            let action = try XCTUnwrap(
+                controller.layoutRefreshController.layoutState.pendingRefresh?.postLayoutActions.first
+            )
+            manager.setHiddenState(nil, for: target.id)
+            // A successful layout forwards the action past its own visibility changes.
+            let revealedAction = action.forwarded(
+                by: [fixture.activeTargetWorkspaceId: .init(after: manager.worldSeq, domains: action.domains)],
+                currentAtEntry: [fixture.activeTargetWorkspaceId]
+            )
+            revealedAction.runIfCurrent(using: manager)
+            XCTAssertEqual(fixture.focusRecorder.focusedTokens, [target.id])
+
+            XCTAssertEqual(controller.commandHandler.performCommand(.monitorFocus(.previous)), .executed)
+            let sourceRequestId = try XCTUnwrap(controller.intentLedger.activeManagedRequest?.requestId)
+            let staleAction = revealedAction.forwarded(
+                by: [fixture.activeTargetWorkspaceId: .init(after: manager.worldSeq, domains: action.domains)],
+                currentAtEntry: [fixture.activeTargetWorkspaceId]
+            )
+            staleAction.runIfCurrent(using: manager)
+            XCTAssertEqual(manager.interactionMonitorId, fixture.sourceMonitor.id)
+            XCTAssertEqual(fixture.focusRecorder.focusedTokens, [target.id, source.id])
+            XCTAssertEqual(controller.intentLedger.activeManagedRequest?.requestId, sourceRequestId)
+        }
+    }
+
     func testNextMonitorCommandsNoOpWithOneMonitor() throws {
         let fixture = try makeMonitorMoveFixture(layout: .niri, followsFocus: false)
         let controller = fixture.controller
