@@ -118,7 +118,8 @@ final class NiriColumnIPCTests: XCTestCase {
             [(workspaceId: workspaceId, monitor: monitor), (workspaceId: WorkspaceDescriptor.ID(), monitor: neighbor)],
             orientations: [monitor.id: .horizontal, neighbor.id: .horizontal]
         )
-        try assertRelations([shown, shown, after, after], active: 1, offset: -644, fixture, [monitor, neighbor])
+        try assertRelations([shown, shown, shown, after], active: 1, offset: -644, fixture, [monitor, neighbor])
+        try assertRelations([shown, shown, after, after], active: 0, offset: -gap, fixture, [monitor, neighbor])
     }
 
     func testWorkspaceDataChannelsFollowWhatChanged() {

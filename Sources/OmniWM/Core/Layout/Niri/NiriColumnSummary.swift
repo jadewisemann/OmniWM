@@ -60,8 +60,6 @@ extension NiriLayoutEngine {
         )
         let viewStart = positions[activeIndex] + state.viewOffset
         let tolerance = 0.5 / max(displayScale(in: workspaceId), 1)
-        let placementMonitor = monitorForWorkspace(workspaceId).map(HiddenPlacementMonitorContext.init)
-        let placementMonitors = monitors.values.map(HiddenPlacementMonitorContext.init)
 
         return columns.indices.map { index in
             guard index != activeIndex else { return .intersecting }
@@ -72,20 +70,8 @@ extension NiriLayoutEngine {
             let inset = (parksOutsideContent ? contentInset : 0) + tolerance
             if start + spans[index] <= inset { return .before }
             if start >= viewportSpan - inset { return .after }
-            let rect = isHorizontal
-                ? CGRect(x: frame.minX + start, y: frame.minY, width: spans[index], height: frame.height)
-                : CGRect(x: frame.minX, y: frame.minY + start, width: frame.width, height: spans[index])
-            switch NiriMonitorPlaneGeometry.overflowEdgeIntersectingNeighboringMonitor(
-                rect,
-                viewportFrame: frame,
-                orientation: geometry.orientation,
-                hiddenPlacementMonitor: placementMonitor,
-                hiddenPlacementMonitors: placementMonitors
-            ) {
-            case .minimum: return .before
-            case .maximum: return .after
-            case nil: return .intersecting
-            }
+            // A column remains visible here even when its overflow reaches a neighboring display.
+            return .intersecting
         }
     }
 
