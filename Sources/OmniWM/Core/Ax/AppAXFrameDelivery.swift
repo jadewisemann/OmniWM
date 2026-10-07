@@ -52,11 +52,11 @@ final class AppAXFrameDelivery {
         frameWriteSuppression.setHardSuppressed(hidden)
     }
 
-    func setWindowMinimized(_ minimized: Bool, for windowId: Int) {
+    func setWindowNativeSuppressed(_ suppressed: Bool, for windowId: Int) {
         cancelFrameJob(for: windowId)
         cancelParkFrameJob(for: windowId)
         closingFrameWriteGenerations.invalidate(for: windowId)
-        frameWriteSuppression.setHardSuppressed(minimized, for: windowId)
+        frameWriteSuppression.setHardSuppressed(suppressed, for: windowId)
     }
 
     func invalidateClosingFrames() {

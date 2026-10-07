@@ -19,7 +19,8 @@ extension NiriLayoutEngine {
             in: context.workspaceId,
             workingFrame: context.workingFrame,
             gaps: context.gaps,
-            orientation: context.orientation
+            orientation: context.orientation,
+            motion: context.motion
         )
         let sizeKeyPath = context.orientation.settledSpanKeyPath
         let viewportSpan: CGFloat = switch context.orientation {

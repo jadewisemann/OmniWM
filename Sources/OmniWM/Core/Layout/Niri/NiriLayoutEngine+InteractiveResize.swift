@@ -5,6 +5,12 @@ import AppKit
 import Foundation
 
 extension NiriLayoutEngine {
+    struct InteractiveResizeTarget {
+        let window: NiriWindow
+        let column: NiriContainer
+        let columnIndex: Int
+    }
+
     func cancelInteractiveResize(
         for column: NiriContainer,
         in workspaceId: WorkspaceDescriptor.ID
@@ -134,6 +140,21 @@ extension NiriLayoutEngine {
         return usableWidth / totalWeight
     }
 
+    func interactiveResizeTarget(
+        windowId: NodeId,
+        in workspaceId: WorkspaceDescriptor.ID
+    ) -> InteractiveResizeTarget? {
+        guard interactiveResize == nil, interactiveMove == nil,
+              let window = findNode(by: windowId, in: workspaceId) as? NiriWindow,
+              isProjectedFocusableWindow(window, in: workspaceId),
+              !window.isFullscreen, !window.constraints.isFixed,
+              let column = findColumn(containing: window, in: workspaceId),
+              let columnIndex = columnIndex(of: column, in: workspaceId)
+        else { return nil }
+
+        return InteractiveResizeTarget(window: window, column: column, columnIndex: columnIndex)
+    }
+
     func interactiveResizeBegin(
         windowId: NodeId,
         edges: ResizeEdge,
@@ -142,20 +163,9 @@ extension NiriLayoutEngine {
         orientation: Monitor.Orientation,
         viewOffset: CGFloat? = nil
     ) -> Bool {
-        guard interactiveResize == nil else { return false }
-        guard interactiveMove == nil else { return false }
-
-        guard let windowNode = findNode(by: windowId, in: workspaceId) as? NiriWindow else { return false }
-        guard isProjectedFocusableWindow(windowNode, in: workspaceId) else { return false }
-        guard let column = findColumn(containing: windowNode, in: workspaceId) else { return false }
-        guard let colIdx = columnIndex(of: column, in: workspaceId) else { return false }
-        if windowNode.isFullscreen {
-            return false
-        }
-
-        if windowNode.constraints.isFixed {
-            return false
-        }
+        guard let target = interactiveResizeTarget(windowId: windowId, in: workspaceId) else { return false }
+        let windowNode = target.window
+        let column = target.column
 
         let baseline = interactiveResizeBaseline(
             windowNode,
@@ -168,7 +178,6 @@ extension NiriLayoutEngine {
         case .horizontal: edges.contains(.left)
         case .vertical: edges.contains(.bottom)
         }
-
         interactiveResize = InteractiveResize(
             windowId: windowId,
             workspaceId: workspaceId,
@@ -176,7 +185,7 @@ extension NiriLayoutEngine {
             originalWindowBaseline: baseline.window,
             edges: edges,
             startMouseLocation: startLocation,
-            columnIndex: colIdx,
+            columnIndex: target.columnIndex,
             orientation: orientation,
             originalViewOffset: isLeadingPrimaryEdge ? viewOffset : nil
         )
@@ -184,7 +193,7 @@ extension NiriLayoutEngine {
         NiriLayoutTrace.record(
             .resize,
             workspaceId: workspaceId,
-            "begin win=\(windowId) col=\(colIdx) edges=\(String(describing: edges))"
+            "begin win=\(windowId) col=\(target.columnIndex) edges=\(String(describing: edges))"
         )
         return true
     }

@@ -78,7 +78,32 @@ extension AXEventHandler {
               case let .exact(token, _) = WindowServerIdentityResolution(windowId: windowId, info: windowInfo),
               controller.workspaceManager.entry(for: token) != nil
         else { return }
+        applyObservedWindowOrdering(windowInfo, token: token)
         controller.surfaceReconciler.noteRestackOccurred()
+    }
+
+    func applyObservedWindowOrdering(
+        _ windowInfo: WindowServerInfo?,
+        token: WindowToken,
+        appFullscreen: Bool = false,
+        requestRefresh: Bool = true
+    ) {
+        guard let controller,
+              let windowInfo,
+              windowInfo.id == UInt32(exactly: token.windowId),
+              managedWindowTokenUsingCachedIdentity(token, matchesObservedPid: windowInfo.pid),
+              let isOrderedIn = windowInfo.isOrderedIn,
+              let entry = controller.workspaceManager.entry(for: token)
+        else { return }
+        if !isOrderedIn {
+            let topology = controller.workspaceManager.spaceTopology
+            guard !appFullscreen,
+                  entry.hiddenState == nil,
+                  !topology.isWindowOnFullscreenSpace(token.windowId),
+                  !topology.isWindowOnKnownInactiveSpace(token.windowId)
+            else { return }
+        }
+        updateWindowNativeWithdrawalState(!isOrderedIn, token: token, requestRefresh: requestRefresh)
     }
 
     private func handleCGSWindowCreated(windowId: UInt32, spaceId: UInt64) {

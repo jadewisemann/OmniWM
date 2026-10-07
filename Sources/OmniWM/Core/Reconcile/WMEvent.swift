@@ -122,6 +122,12 @@ enum WMEvent: Equatable {
         minimized: Bool,
         source: WMEventSource
     )
+    case windowNativeWithdrawalChanged(
+        token: WindowToken,
+        workspaceId: WorkspaceDescriptor.ID,
+        withdrawn: Bool,
+        source: WMEventSource
+    )
     case hiddenStateChanged(
         token: WindowToken,
         workspaceId: WorkspaceDescriptor.ID,
@@ -326,6 +332,7 @@ extension WMEvent {
              let .windowAdmissionHintsChanged(token, _, _, _),
              let .hiddenStateChanged(token, _, _, _, _),
              let .windowMinimizedChanged(token, _, _, _),
+             let .windowNativeWithdrawalChanged(token, _, _, _),
              let .nativeFullscreenTransition(token, _, _, _, _),
              let .managedReplacementMetadataChanged(token, _, _, _, _),
              let .managedFocusRequested(token, _, _, _, _),
@@ -402,6 +409,8 @@ extension WMEvent {
             "hidden_state_changed token=\(token) workspace=\(workspaceId.uuidString) hidden=\(hiddenState != nil)"
         case let .windowMinimizedChanged(token, workspaceId, minimized, _):
             "window_minimized token=\(token) workspace=\(workspaceId.uuidString) minimized=\(minimized)"
+        case let .windowNativeWithdrawalChanged(token, workspaceId, withdrawn, _):
+            "window_native_withdrawal token=\(token) workspace=\(workspaceId.uuidString) withdrawn=\(withdrawn)"
         case let .nativeFullscreenTransition(token, workspaceId, _, change, _):
             "native_fullscreen token=\(token) workspace=\(workspaceId.uuidString) active=\(change.isNativeFullscreenActive)"
         case let .managedReplacementMetadataChanged(token, workspaceId, monitorId, _, _):

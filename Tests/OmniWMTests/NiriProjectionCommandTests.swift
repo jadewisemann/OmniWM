@@ -469,7 +469,18 @@ final class NiriProjectionCommandTests: XCTestCase {
             maxSize: .zero,
             isFixed: false
         )
-        constrained.column.cachedWidth = 600
+        constrained.engine.visibleContainerCount = 3
+        let peer = constrained.engine.addWindow(
+            token: WindowToken(pid: 743, windowId: 4), to: constrained.workspaceId, afterSelection: nil
+        )
+        let peerColumn = try XCTUnwrap(constrained.engine.findColumn(containing: peer, in: constrained.workspaceId))
+        constrained.column.width = .fixed(400)
+        peerColumn.width = .fixed(400)
+        let before = layout(
+            engine: constrained.engine, workspaceId: constrained.workspaceId,
+            selectedWindow: constrained.a, orientation: .horizontal
+        )
+        let originalWidth = try XCTUnwrap(before[constrained.a.token]).width
         XCTAssertTrue(
             constrained.engine.interactiveResizeBegin(
                 windowId: constrained.a.id,
@@ -486,7 +497,19 @@ final class NiriProjectionCommandTests: XCTestCase {
                 gaps: LayoutGaps(horizontal: gap, vertical: gap)
             )
         )
-        XCTAssertLessThan(constrained.column.cachedWidth, 1100)
+        guard case let .fixed(chosenWidth) = constrained.column.width else {
+            return XCTFail("Expected a chosen pixel width after resizing")
+        }
+        XCTAssertLessThan(chosenWidth, 1100)
+        XCTAssertEqual(constrained.column.cachedWidth, originalWidth - 400, accuracy: 0.001)
+        XCTAssertEqual(peerColumn.cachedWidth, try XCTUnwrap(before[peer.token]).width, accuracy: 0.001)
+        XCTAssertEqual(peerColumn.width, .fixed(400))
+        XCTAssertEqual(
+            constrained.engine.projectedWidthBounds(
+                for: constrained.column, workspaceId: constrained.workspaceId
+            ).min,
+            1
+        )
 
         let projected = try makeMixedColumnFixture()
         let baseline = makeColumnFixture(includeHidden: false)

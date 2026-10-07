@@ -97,6 +97,11 @@ extension AXEventHandler {
         guard case let .exact(windowServerToken, windowInfo) = identity else { return }
         if retryAdmissionForFrameChange(windowId: windowId, windowServerToken: windowServerToken) { return }
         guard let entry = controller.workspaceManager.entry(for: windowServerToken) else { return }
+        if controller.workspaceManager.borderFocusToken == entry.token,
+           isWindowDisplayable(token: entry.token)
+        {
+            controller.surfaceReconciler.noteBorderChanged()
+        }
         if entry.mode == .tiling,
            controller.mouseEventHandler.handleNativeTitleBarDragFrameChanged(for: entry)
         {

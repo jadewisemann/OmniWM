@@ -4,8 +4,15 @@
 import Foundation
 
 extension StateReducer {
-    static func reduceWindowMinimization(_ event: WMEvent, context: ReductionContext, plan: inout ActionPlan) {
-        guard case let .windowMinimizedChanged(token, _, minimized, _) = event, minimized else { return }
+    static func reduceNativeWindowSuppression(_ event: WMEvent, context: ReductionContext, plan: inout ActionPlan) {
+        let token: WindowToken
+        switch event {
+        case let .windowMinimizedChanged(changedToken, _, true, _),
+             let .windowNativeWithdrawalChanged(changedToken, _, true, _):
+            token = changedToken
+        default:
+            return
+        }
         var focus = context.currentSnapshot.focusSession
         if focus.pendingManagedFocus.token == token {
             focus.pendingManagedFocus = .empty

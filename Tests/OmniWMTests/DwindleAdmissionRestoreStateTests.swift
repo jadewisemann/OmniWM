@@ -193,8 +193,8 @@ final class DwindleAdmissionRestoreStateTests: XCTestCase {
             XCTAssertEqual(session.manager.restoreIntent(for: token)?.dwindlePlacement, placements[token])
         }
         XCTAssertEqual(placements[tokens[0]]?.steps.map(\.childIndex), [0])
-        XCTAssertEqual(placements[tokens[1]]?.steps.map(\.childIndex), [1, 0])
-        XCTAssertEqual(placements[tokens[2]]?.steps.map(\.childIndex), [1, 1])
+        XCTAssertEqual(placements[tokens[1]]?.steps.map(\.childIndex), [1, 1])
+        XCTAssertEqual(placements[tokens[2]]?.steps.map(\.childIndex), [1, 0])
         XCTAssertEqual(
             placements[tokens[0]]?.steps.first?.orientation,
             session.engine.root(for: session.workspaceId)?.splitOrientation

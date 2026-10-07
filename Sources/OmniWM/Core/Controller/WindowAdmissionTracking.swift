@@ -151,7 +151,7 @@ extension AXEventHandler {
         let isMinimized = controller.workspaceManager.entry(for: candidate.token)?.observedState.isMinimized
             ?? candidate.isMinimized
         if isMinimized {
-            controller.axManager.setWindowMinimized(true, token: candidate.token)
+            controller.axManager.setWindowNativeSuppressed(true, token: candidate.token)
         }
         let trackedToken = controller.workspaceManager.addWindow(
             candidate.axRef,
@@ -195,7 +195,7 @@ extension AXEventHandler {
         controller: WMController
     ) -> CGRect? {
         var floatingTargetFrame: CGRect?
-        if entry.mode == .floating, !entry.observedState.isMinimized {
+        if entry.mode == .floating, !entry.observedState.isNativeSuppressed {
             let observedFrame = AXWindowService.framePreferFast(candidate.axRef)
                 ?? (try? AXWindowService.frame(candidate.axRef))
             let preferredMonitor = controller.workspaceManager.monitor(for: entry.workspaceId)

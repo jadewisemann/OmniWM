@@ -56,8 +56,8 @@
   },
   "brave_pip": {
     "aeroSpaceLabel": "popup",
-    "expectedDisposition": "floating",
-    "note": "Picture-in-Picture. OmniWM deliberately gives PiP full rights so the user can move it (see the browserPictureInPicture built-in rule); AeroSpace makes it untouchable. Consider extending the built-in PiP rule to Brave/Chrome/Edge for consistency."
+    "expectedDisposition": "unmanaged",
+    "note": "Native PiP remains outside OmniWM workspace ownership."
   },
   "calculator": {
     "aeroSpaceLabel": "dialog",
@@ -89,8 +89,8 @@
   },
   "chrome_pip": {
     "aeroSpaceLabel": "popup",
-    "expectedDisposition": "floating",
-    "note": "Same as brave_pip."
+    "expectedDisposition": "unmanaged",
+    "note": "Native PiP remains outside OmniWM workspace ownership."
   },
   "chrome_sharing_is_in_progress_popup": {
     "aeroSpaceLabel": "popup",
@@ -177,8 +177,8 @@
   },
   "firefox_pip": {
     "aeroSpaceLabel": "popup",
-    "expectedDisposition": "floating",
-    "note": "Deliberate browserPictureInPicture built-in rule."
+    "expectedDisposition": "unmanaged",
+    "note": "Native PiP remains outside OmniWM workspace ownership."
   },
   "ghostty": {
     "aeroSpaceLabel": "window",
@@ -301,7 +301,8 @@
   },
   "microsoft_edge_pip": {
     "aeroSpaceLabel": "dialog",
-    "expectedDisposition": "floating"
+    "expectedDisposition": "unmanaged",
+    "note": "Native PiP remains outside OmniWM workspace ownership."
   },
   "microsoft_word_search_toolbar": {
     "aeroSpaceLabel": "popup",
@@ -521,7 +522,7 @@
   },
   "zen_browser_pip": {
     "aeroSpaceLabel": "popup",
-    "expectedDisposition": "floating",
-    "note": "Deliberate browserPictureInPicture built-in rule."
+    "expectedDisposition": "unmanaged",
+    "note": "Native PiP remains outside OmniWM workspace ownership."
   }
 }

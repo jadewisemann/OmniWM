@@ -70,13 +70,11 @@ final class StatusBarController: NSObject {
         let host = StatusMenuHost(model: model, controller: controller)
         host.isExemptWindow = { [weak hiddenBarController] in
             hiddenBarController?.statusItems.ownsStatusItemWindow($0) == true
+                || WorkspaceBarMenuButton.contains(NSApp.currentEvent, in: $0)
         }
         menuHost = host
 
-        hiddenBarController.statusItems.bind(omniButton: button, statusItem: ownedStatusItem)
-        hiddenBarController.statusItems.onFallbackIconClick = { [weak self] event, anchor in
-            self?.routeClick(event: event, anchor: anchor)
-        }
+        hiddenBarController.statusItems.bind(omniButton: button)
         hiddenBarController.setup()
         refreshWorkspaces()
     }
@@ -91,33 +89,29 @@ final class StatusBarController: NSObject {
     }
 
     @objc private func handleClick(_ button: NSStatusBarButton) {
-        if let event = NSApp.currentEvent {
-            routeClick(event: event, anchor: button)
-        } else {
-            hiddenBarController.dismissPanel()
-            showMenu(from: button)
-        }
+        routeClick(event: NSApp.currentEvent, anchor: button)
     }
 
-    private func routeClick(event: NSEvent, anchor: NSView) {
+    func routeClick(
+        event: NSEvent?,
+        anchor: NSView,
+        edge: PopupAttachment.Edge = .below,
+        monitorId: Monitor.ID? = nil
+    ) {
         switch Self.clickRoute(
-            isRightClick: event.type == .rightMouseUp,
-            optionHeld: event.modifierFlags.contains(.option)
+            isRightClick: event?.type == .rightMouseUp,
+            optionHeld: event?.modifierFlags.contains(.option) == true
         ) {
         case .hiddenIconsBar:
-            controller?.toggleHiddenBarPanel()
+            controller?.toggleHiddenBarPanel(on: monitorId)
         case .menu:
             hiddenBarController.dismissPanel()
-            showMenu(from: anchor)
+            menuHost?.toggle(from: anchor, edge: edge)
         }
     }
 
     func dismissPanel() {
         menuHost?.dismiss()
-    }
-
-    private func showMenu(from anchor: NSView) {
-        menuHost?.toggle(from: anchor, edge: controller?.statusMenuEdge(from: anchor) ?? .below)
     }
 
     func handleTraceCaptureStateChange() {

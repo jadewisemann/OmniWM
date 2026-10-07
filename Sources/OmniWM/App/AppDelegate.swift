@@ -144,7 +144,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             persistence: SettingsFilePersistence(directory: storagePaths.configDirectory),
             runtimeState: runtimeState
         )
-        let hiddenBarController = HiddenBarController(settings: settings)
+        let hiddenBarController = HiddenBarController(settings: settings, hider: .live(in: storagePaths.stateDirectory))
         let controller = WMController(
             settings: settings,
             hiddenBarController: hiddenBarController,

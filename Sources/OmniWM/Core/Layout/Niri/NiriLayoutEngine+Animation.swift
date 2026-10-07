@@ -96,7 +96,7 @@ extension NiriLayoutEngine {
             col.animateMoveFrom(
                 displacement: movement,
                 clock: animationClock,
-                config: windowMovementAnimationConfig,
+                config: context.motion.scaled(windowMovementAnimationConfig),
                 displayRefreshRate: displayRefreshRate(in: context.workspaceId),
                 animated: context.motion.animationsEnabled
             )
@@ -143,7 +143,7 @@ extension NiriLayoutEngine {
             col.animateMoveFrom(
                 displacement: movement,
                 clock: animationClock,
-                config: windowMovementAnimationConfig,
+                config: context.motion.scaled(windowMovementAnimationConfig),
                 displayRefreshRate: displayRefreshRate(in: context.workspaceId),
                 animated: context.motion.animationsEnabled
             )
@@ -336,7 +336,7 @@ extension NiriLayoutEngine {
                     displacement: CGPoint(x: dx, y: dy),
                     yContainmentFrame: yContainmentFrame,
                     clock: animationClock,
-                    config: windowMovementAnimationConfig,
+                    config: motion.scaled(windowMovementAnimationConfig),
                     displayRefreshRate: displayRefreshRate(in: workspaceId),
                     animated: motion.animationsEnabled
                 )
@@ -391,7 +391,7 @@ extension NiriLayoutEngine {
             column.animateMoveFrom(
                 displacement: displacement,
                 clock: animationClock,
-                config: windowMovementAnimationConfig,
+                config: motion.scaled(windowMovementAnimationConfig),
                 displayRefreshRate: displayRefreshRate(in: workspaceId),
                 animated: motion.animationsEnabled
             )

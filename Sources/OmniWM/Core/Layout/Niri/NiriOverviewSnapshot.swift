@@ -47,6 +47,10 @@ extension NiriLayoutEngine {
             geometry: geometry, time: 0,
             hiddenPlacementMonitor: nil, hiddenPlacementMonitors: []
         )
+        reconcilePrimarySpanFit(
+            in: workspaceId, workingFrame: context.area.workingFrame,
+            gaps: context.primaryGap, orientation: context.orientation, motion: nil
+        )
         let snapshots: [NiriOverviewColumnSnapshot]
         let viewportPosition: CGFloat
         if let single = singleWindowLayoutContext(in: workspaceId), let column = columns.first {
@@ -58,10 +62,11 @@ extension NiriLayoutEngine {
                 time: context.time, orientation: context.orientation
             )
             let activeIndex = projectedActiveColumnIndex(state: state, columns: columns, in: workspaceId)
-            viewportPosition = prepared.positions[activeIndex] + state.viewOffset
+            viewportPosition = prepared[activeIndex].position + state.viewOffset
             snapshots = columns.enumerated().map { index, column in
+                let preparedColumn = prepared[index]
                 let rect = context.area.canonicalContainerRect(
-                    position: prepared.positions[index], span: prepared.spans[index], orientation: context.orientation
+                    position: preparedColumn.position, span: preparedColumn.span, orientation: context.orientation
                 )
                 return overviewColumn(
                     column,

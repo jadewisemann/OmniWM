@@ -65,7 +65,8 @@ final class AppVisibilityDiagnosticsTests: XCTestCase {
         XCTAssertTrue(report.contains("windows=1 workspaces=1 activeWorkspaces=1"))
         XCTAssertTrue(report.contains("pendingReveal=id:\(reveal.id),win:\(token.windowId)"))
         XCTAssertTrue(report.contains("destination:scratchpad"))
-        XCTAssertTrue(report.contains("hidden=scratchpad layout=nativeFullscreen"))
+        XCTAssertTrue(report
+            .contains("hidden=scratchpad minimized=false nativeWithdrawn=false layout=nativeFullscreen"))
         XCTAssertTrue(report.contains("sync=unverified-os"))
         XCTAssertTrue(report.contains("projection workspace=\(workspaceId.uuidString) expectedExcluded=1"))
         XCTAssertTrue(report.contains("niri=excluded:1,missing:0,unexpected:0,match:true"), report)

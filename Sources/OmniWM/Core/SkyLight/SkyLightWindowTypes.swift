@@ -101,6 +101,8 @@ enum NativeSpaceWindowInventoryResult: Equatable, Sendable {
 }
 
 enum CGSEventType: UInt32 {
+    case secureEventInputStarted = 752
+    case secureEventInputStopped = 753
     case windowClosed = 804
     case windowMoved = 806
     case windowResized = 807
@@ -121,6 +123,7 @@ struct WindowServerInfo: Equatable, Sendable {
     var attributes: UInt32 = 0
     var parentId: UInt32 = 0
     var title: String?
+    var isOrderedIn: Bool?
 
     static func hasDocumentTag(_ tags: UInt64) -> Bool {
         (tags & 0x1) != 0

@@ -69,7 +69,7 @@ enum FullRescanEnumerationRoute: Equatable, Sendable {
 struct FullRescanWindowCandidate: Sendable {
     let enumeratedWindow: AXEnumeratedWindow
     let logicalPID: pid_t
-    let windowServerInfo: WindowServerInfo?
+    var windowServerInfo: WindowServerInfo?
     let windowServerOwnerPID: pid_t?
     let enumerationRoute: FullRescanEnumerationRoute
     let callbackGeneration: UInt64?

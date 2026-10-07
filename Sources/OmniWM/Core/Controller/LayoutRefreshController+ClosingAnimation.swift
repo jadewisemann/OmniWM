@@ -17,7 +17,7 @@ extension LayoutRefreshController {
             from: 0,
             to: 1,
             startTime: CACurrentMediaTime(),
-            config: .balanced.with(epsilon: 0.01, velocityEpsilon: 0.1),
+            config: controller.motionPolicy.snapshot().scaled(.balanced.with(epsilon: 0.01, velocityEpsilon: 0.1)),
             displayRefreshRate: layoutState.refreshRateByDisplay[monitor.displayId] ?? 60.0
         )
 

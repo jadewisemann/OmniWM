@@ -137,8 +137,6 @@ struct CompiledWindowRule {
             )
         }
 
-        appendPictureInPictureRules(to: &rules)
-
         for subrole in [kAXStandardWindowSubrole as String, kAXUnknownSubrole as String] {
             rules.append(
                 CompiledWindowRule(
@@ -170,44 +168,5 @@ struct CompiledWindowRule {
         )
 
         return rules
-    }
-
-    private static func appendPictureInPictureRules(to rules: inout [CompiledWindowRule]) {
-        let pictureInPicturePattern = "^Picture-in-Picture$"
-        let pictureInPictureRegex: NSRegularExpression
-        do {
-            pictureInPictureRegex = try NSRegularExpression(pattern: pictureInPicturePattern)
-        } catch {
-            preconditionFailure("Invalid built-in Picture-in-Picture pattern: \(error)")
-        }
-
-        let pipRules: [AppRule] = [
-            AppRule(
-                bundleId: "org.mozilla.firefox",
-                titleRegex: pictureInPicturePattern,
-                axRole: kAXWindowRole as String,
-                axSubrole: kAXStandardWindowSubrole as String,
-                layout: .float
-            ),
-            AppRule(
-                bundleId: "app.zen-browser.zen",
-                titleRegex: pictureInPicturePattern,
-                axRole: kAXWindowRole as String,
-                axSubrole: kAXStandardWindowSubrole as String,
-                layout: .float
-            )
-        ]
-
-        let pipOffset = rules.count
-        for (index, rule) in pipRules.enumerated() {
-            rules.append(
-                CompiledWindowRule(
-                    rule: rule,
-                    source: .builtIn("browserPictureInPicture"),
-                    titleRegex: pictureInPictureRegex,
-                    order: pipOffset + index
-                )
-            )
-        }
     }
 }

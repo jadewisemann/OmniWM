@@ -17,6 +17,7 @@ extension SkyLight {
         let windowIteratorGetTags: SkyLightQueryFunctions.WindowIteratorGetTagsFunc
         let windowIteratorGetAttributes: SkyLightQueryFunctions.WindowIteratorGetAttributesFunc
         let windowIteratorGetParentID: SkyLightQueryFunctions.WindowIteratorGetParentIDFunc
+        let includeOrderedIn: Bool
 
         nonisolated func read(connectionId cid: Int32) -> [UInt32: WindowServerInfo]? {
             guard !windowIds.isEmpty else { return [:] }
@@ -36,21 +37,23 @@ extension SkyLight {
             while windowIteratorAdvance(iterator) {
                 let windowId = windowIteratorGetWindowID(iterator)
                 guard windowIds.contains(windowId) else { continue }
+                let attributes = windowIteratorGetAttributes(iterator)
                 windowInfoById[windowId] = WindowServerInfo(
                     id: windowId,
                     pid: windowIteratorGetPID(iterator),
                     level: windowIteratorGetLevel(iterator),
                     frame: windowIteratorGetBounds(iterator),
                     tags: windowIteratorGetTags(iterator),
-                    attributes: windowIteratorGetAttributes(iterator),
-                    parentId: windowIteratorGetParentID(iterator)
+                    attributes: attributes,
+                    parentId: windowIteratorGetParentID(iterator),
+                    isOrderedIn: includeOrderedIn ? (attributes & 0x2) != 0 : nil
                 )
             }
             return windowInfoById
         }
     }
 
-    private func windowInfoQuery(_ windowIds: Set<UInt32>) -> WindowInfoQuery {
+    private func windowInfoQuery(_ windowIds: Set<UInt32>, includeOrderedIn: Bool = false) -> WindowInfoQuery {
         WindowInfoQuery(
             windowIds: windowIds,
             windowQueryWindows: queries.windowQueryWindows,
@@ -62,7 +65,8 @@ extension SkyLight {
             windowIteratorGetBounds: queries.windowIteratorGetBounds,
             windowIteratorGetTags: queries.windowIteratorGetTags,
             windowIteratorGetAttributes: queries.windowIteratorGetAttributes,
-            windowIteratorGetParentID: queries.windowIteratorGetParentID
+            windowIteratorGetParentID: queries.windowIteratorGetParentID,
+            includeOrderedIn: includeOrderedIn
         )
     }
 
@@ -73,11 +77,47 @@ extension SkyLight {
         } succeeded: { $0 != nil }
     }
 
-    func queryWindowInfoDeferred(windowIds: Set<UInt32>) async throws -> [UInt32: WindowServerInfo]? {
+    func hasOverlappingWindowsAbove(_ windowId: UInt32, among candidates: Set<UInt32>) -> Bool? {
+        MainThreadAXSpanTrace.measure(.focusCoverageQuery, windowId: Int(windowId), count: candidates.count) {
+            guard let windows = CGWindowListCopyWindowInfo(
+                [.optionOnScreenAboveWindow, .optionIncludingWindow], windowId
+            ) as? [[String: Any]] else { return nil as Bool? }
+            return Self.hasOverlappingWindowsAbove(windowId, among: candidates, in: windows)
+        } succeeded: { $0 != nil }
+    }
+
+    static func hasOverlappingWindowsAbove(
+        _ windowId: UInt32,
+        among candidates: Set<UInt32>,
+        in windows: [[String: Any]]
+    ) -> Bool? {
+        guard let targetIndex = windows.firstIndex(where: { $0[kCGWindowNumber as String] as? UInt32 == windowId }),
+              let targetBounds = windows[targetIndex][kCGWindowBounds as String] as? [String: Any],
+              let targetFrame = CGRect(dictionaryRepresentation: targetBounds as CFDictionary)
+        else { return nil }
+        for window in windows[..<targetIndex] {
+            guard let candidateId = window[kCGWindowNumber as String] as? UInt32,
+                  candidates.contains(candidateId)
+            else { continue }
+            guard let bounds = window[kCGWindowBounds as String] as? [String: Any],
+                  let frame = CGRect(dictionaryRepresentation: bounds as CFDictionary)
+            else { return nil }
+            let overlap = targetFrame.intersection(frame)
+            if !overlap.isNull, overlap.width > 4, overlap.height > 4 {
+                return true
+            }
+        }
+        return false
+    }
+
+    func queryWindowInfoDeferred(
+        windowIds: Set<UInt32>,
+        includeOrderedIn: Bool = false
+    ) async throws -> [UInt32: WindowServerInfo]? {
         try Task.checkCancellation()
         guard !windowIds.isEmpty else { return [:] }
         guard let connection = windowInfoConnection() else { return nil }
-        let query = windowInfoQuery(windowIds)
+        let query = windowInfoQuery(windowIds, includeOrderedIn: includeOrderedIn)
         return try await connection.perform { query.read(connectionId: $0) }
     }
 

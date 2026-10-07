@@ -69,7 +69,8 @@ extension WorkspaceSwipePresentation {
         return previewSurface(controller).beginWindowDeparture(
             item: .init(handle: handle, frame: frame),
             monitor: sourceMonitor,
-            offset: offset
+            offset: offset,
+            motion: controller.motionPolicy.snapshot()
         )
     }
 

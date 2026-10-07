@@ -64,7 +64,7 @@ extension NiriLayoutEngine {
         column.animateWidthTo(
             newWidth: targetPixels,
             clock: animationClock,
-            config: windowMovementAnimationConfig,
+            config: context.motion.scaled(windowMovementAnimationConfig),
             displayRefreshRate: displayRefreshRate(in: context.workspaceId),
             animated: context.motion.animationsEnabled
         )
@@ -204,6 +204,7 @@ extension NiriLayoutEngine {
     ) {
         assertSanctionedMutation()
         guard !presetContainerPrimarySpans.isEmpty else { return }
+        beginManualPrimarySpanResize(column, in: context.workspaceId, orientation: context.orientation)
         if context.orientation == .vertical {
             toggleContainerHeight(
                 column,
@@ -307,6 +308,7 @@ extension NiriLayoutEngine {
         state: inout ViewportState
     ) {
         assertSanctionedMutation()
+        beginManualPrimarySpanResize(column, in: context.workspaceId, orientation: context.orientation)
         if context.orientation == .vertical {
             let previousHeight = column.currentHeightForSizing(
                 workingAreaHeight: context.workingFrame.height,
@@ -357,6 +359,7 @@ extension NiriLayoutEngine {
         state: inout ViewportState
     ) {
         assertSanctionedMutation()
+        beginManualPrimarySpanResize(column, in: context.workspaceId, orientation: context.orientation)
         if context.orientation == .vertical {
             toggleFullHeight(
                 column,
@@ -378,7 +381,7 @@ extension NiriLayoutEngine {
         column.animateWidthTo(
             newWidth: targetPixels,
             clock: animationClock,
-            config: windowMovementAnimationConfig,
+            config: context.motion.scaled(windowMovementAnimationConfig),
             displayRefreshRate: displayRefreshRate(in: context.workspaceId),
             animated: context.motion.animationsEnabled
         )
@@ -424,8 +427,8 @@ extension NiriLayoutEngine {
                 column: column,
                 columns: columns,
                 state: projectedState,
-                workingFrame: context.workingFrame,
-                gaps: context.gaps
+                context: context,
+                scale: displayScale(in: context.workspaceId)
             ) else { return }
             resultingWidth = applyColumnExpansion(plan, to: column, context: context, state: &projectedState)
         }
@@ -447,6 +450,7 @@ extension NiriLayoutEngine {
 
         guard let leftmostColX = plan.leftmostColumnX, let activeColX = plan.activeColumnX else { return nil }
         let targetWidth = (column.cachedWidth + plan.availableWidth).clamped(to: 1 ... NiriSizeChange.maxPixels)
+        beginManualPrimarySpanResize(column, in: context.workspaceId, orientation: context.orientation)
         applyColumnWidth(
             column,
             width: .fixed(targetWidth),

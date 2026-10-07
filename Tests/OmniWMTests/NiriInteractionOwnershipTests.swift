@@ -261,6 +261,9 @@ final class NiriInteractionOwnershipTests: NiriInteractionTestCase {
         sourceColumn.isFullWidth = true
         sourceColumn.savedWidth = .proportion(0.4)
         sourceColumn.hasManualSingleWindowWidthOverride = false
+        engine.resolvePrimaryContainerSpans(
+            in: sourceWorkspace, workingFrame: workingFrame, gaps: 0, orientation: .horizontal
+        )
         let sourceAnimation = SpringAnimation(
             from: Double(sourceColumn.cachedWidth),
             to: Double(sourceColumn.cachedWidth + 100),
@@ -284,13 +287,14 @@ final class NiriInteractionOwnershipTests: NiriInteractionTestCase {
         XCTAssertEqual(sourceColumn.targetWidth, sourceColumn.cachedWidth + 100)
         XCTAssertTrue(
             engine.interactiveResizeUpdate(
-                currentLocation: CGPoint(x: sourceFrame.maxX + 120, y: sourceFrame.midY),
+                currentLocation: CGPoint(x: sourceFrame.maxX - 120, y: sourceFrame.midY),
                 monitorFrame: workingFrame,
                 gaps: LayoutGaps(horizontal: 0, vertical: 0)
             )
         )
 
         let resizedWidth = sourceColumn.cachedWidth
+        XCTAssertEqual(resizedWidth, sourceFrame.width - 120, accuracy: 0.001)
         XCTAssertEqual(sourceColumn.width, .fixed(resizedWidth))
         XCTAssertNil(sourceColumn.presetWidthIdx)
         XCTAssertFalse(sourceColumn.isFullWidth)

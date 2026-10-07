@@ -118,11 +118,12 @@ extension AXEventHandler {
 
     func hasPendingManagedReplacementDestroy(
         _ token: WindowToken,
-        workspaceId: WorkspaceDescriptor.ID
+        workspaceId: WorkspaceDescriptor.ID,
+        evidence: WindowDestroyEvidence? = nil
     ) -> Bool {
         let key = ManagedReplacementKey(pid: token.pid, workspaceId: workspaceId)
         return pendingManagedReplacementBursts[key]?.destroys.contains {
-            $0.candidate.token == token
+            $0.candidate.token == token && (evidence == nil || $0.candidate.evidence == evidence)
         } == true
     }
 

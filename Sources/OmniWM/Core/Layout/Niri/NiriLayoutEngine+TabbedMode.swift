@@ -23,7 +23,7 @@ extension NiriLayoutEngine {
                         column.animateWidthTo(
                             newWidth: clampedTarget,
                             clock: animationClock,
-                            config: windowMovementAnimationConfig,
+                            config: motion.scaled(windowMovementAnimationConfig),
                             displayRefreshRate: displayRefreshRate(in: workspaceId),
                             animated: motion.animationsEnabled
                         )
@@ -106,7 +106,7 @@ extension NiriLayoutEngine {
                     window.animateMoveFrom(
                         displacement: delta,
                         clock: animationClock,
-                        config: windowMovementAnimationConfig,
+                        config: motion.scaled(windowMovementAnimationConfig),
                         displayRefreshRate: displayRefreshRate(in: workspaceId),
                         animated: motion.animationsEnabled
                     )
@@ -168,7 +168,7 @@ extension NiriLayoutEngine {
                 column.animateWidthTo(
                     newWidth: clampedTarget,
                     clock: animationClock,
-                    config: windowMovementAnimationConfig,
+                    config: motion.scaled(windowMovementAnimationConfig),
                     displayRefreshRate: displayRefreshRate(in: workspaceId),
                     animated: motion.animationsEnabled
                 )

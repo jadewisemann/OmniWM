@@ -195,7 +195,7 @@ final class WindowActionHandler {
                     closeButton,
                     kAXPressAction as CFString,
                     noteKey: "performPressFailed"
-                )
+                ) == .success
             }
             return false
         } succeeded: { $0 }

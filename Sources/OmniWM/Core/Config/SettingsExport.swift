@@ -89,6 +89,7 @@ struct SettingsExport: Equatable {
     var statusBar: StatusBar
     var hiddenBar: HiddenBar
     var animationsEnabled: Bool
+    var animationSpeed: Double
     var language: String?
 
     var clipboard: Clipboard
@@ -304,6 +305,7 @@ extension SettingsExport {
             statusBar: StatusBar.defaults(),
             hiddenBar: HiddenBar.defaults(),
             animationsEnabled: true,
+            animationSpeed: 1,
             language: nil,
             clipboard: Clipboard.defaults(),
             quakeTerminal: QuakeTerminal.defaults(),

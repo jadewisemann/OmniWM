@@ -13,15 +13,18 @@ struct NiriColumnExpansionPlan {
         column: NiriContainer,
         columns: [NiriContainer],
         state: ViewportState,
-        workingFrame: CGRect,
-        gaps: CGFloat
+        context: NiriInteractionContext,
+        scale: CGFloat
     ) {
         guard let activeColumnIndex = columns.firstIndex(where: { $0 === column }) else { return nil }
+        let gaps = context.gaps
         let viewX = state.columnX(
             at: state.activeColumnIndex.clamped(to: 0 ... max(0, columns.count - 1)),
             columns: columns,
             gap: gaps
         ) + state.viewOffset
+        let viewportStart = (viewX + gaps).roundedToPhysicalPixel(scale: scale)
+        let viewportEnd = (viewX + context.workingFrame.width).roundedToPhysicalPixel(scale: scale)
 
         var widthTaken: CGFloat = 0
         var leftmostColX: CGFloat?
@@ -31,7 +34,7 @@ struct NiriColumnExpansionPlan {
 
         for idx in columns.indices {
             let colX = state.columnX(at: idx, columns: columns, gap: gaps)
-            if colX < viewX + gaps {
+            if colX.roundedToPhysicalPixel(scale: scale) < viewportStart {
                 continue
             }
 
@@ -40,7 +43,7 @@ struct NiriColumnExpansionPlan {
             }
 
             let width = columns[idx].cachedWidth
-            if viewX + workingFrame.width < colX + width + gaps {
+            if (colX + width + gaps).roundedToPhysicalPixel(scale: scale) > viewportEnd {
                 break
             }
 
@@ -55,8 +58,8 @@ struct NiriColumnExpansionPlan {
         }
 
         guard activeColumnWasFullyVisible else { return nil }
-        let availableWidth = workingFrame.width - gaps - widthTaken
-        guard availableWidth > 0 else { return nil }
+        let availableWidth = context.workingFrame.width - gaps - widthTaken
+        guard availableWidth.roundedToPhysicalPixel(scale: scale) > 0 else { return nil }
 
         self.availableWidth = availableWidth
         leftmostColumnX = leftmostColX

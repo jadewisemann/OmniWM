@@ -221,7 +221,7 @@ extension WorldStore {
             let tiledEntries = windows.windows(in: workspaceId).filter { $0.mode == .tiling }
             let authoritativeTokens = Set(tiledEntries.lazy.map(\.token))
             let excludedTokens = Set(tiledEntries.lazy.filter {
-                self.hiddenAppPIDs.contains($0.pid) || $0.observedState.isMinimized
+                self.hiddenAppPIDs.contains($0.pid) || $0.observedState.isNativeSuppressed
             }.map(\.token))
             niriEngine?.setProjectionExclusions(excludedTokens, in: workspaceId)
             dwindleEngine?.setExcludedTokens(

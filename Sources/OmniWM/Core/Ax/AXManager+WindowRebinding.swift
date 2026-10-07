@@ -153,7 +153,7 @@ extension AXManager {
             reason: "rekey"
         )
         prepareFrameContextsForRebind(from: oldWindowId, to: newWindowId, acknowledgement: acknowledgement)
-        AppAXContextRegistry.rekeyMinimizedWindow(from: oldWindow.token, to: newWindow.token)
+        AppAXContextRegistry.rekeyNativeSuppressedWindow(from: oldWindow.token, to: newWindow.token)
         let isIncarnationReplacement = oldWindow.token.pid != newWindow.token.pid
             || oldWindowId == newWindowId
         let deliveries = resetFrameApplicationStateForRebind(

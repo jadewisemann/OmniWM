@@ -43,8 +43,8 @@
   },
   "rules": [],
   "expectedDecision": {
-    "disposition": "floating",
-    "source": "builtInRule(browserPictureInPicture)",
+    "disposition": "unmanaged",
+    "source": "builtInRule(externalSurface)",
     "heuristicReasons": [],
     "layoutDecisionKind": "explicitLayout"
   }

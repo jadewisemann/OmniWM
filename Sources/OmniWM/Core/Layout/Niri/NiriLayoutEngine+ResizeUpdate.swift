@@ -17,46 +17,8 @@ extension NiriLayoutEngine {
         _ column: NiriContainer, context: ResizeUpdateContext,
         viewportState: ((inout ViewportState) -> Void) -> Void
     ) -> Bool {
-        let resize = context.resize
-        let delta = context.delta
-        let monitorFrame = context.monitorFrame
-        let gaps = context.gaps
-        var changed = false
-        if resize.edges.hasHorizontal, let originalWidth = resize.originalContainerSpan {
-            column.widthAnimation = nil
-            column.targetWidth = nil
-
-            var dx = delta.x
-
-            if resize.edges.contains(.left) {
-                dx = -dx
-            }
-
-            let widthBounds = projectedWidthBounds(for: column, workspaceId: resize.workspaceId)
-            let minWidth = widthBounds.min
-            let viewportMaxWidth = monitorFrame.width - 2 * gaps.horizontal
-            let maxWidth = max(
-                minWidth,
-                min(viewportMaxWidth, widthBounds.max ?? viewportMaxWidth)
-            )
-
-            let newWidth = originalWidth + dx
-            column.cachedWidth = newWidth.clamped(to: minWidth ... maxWidth)
-            column.width = .fixed(column.cachedWidth)
-            column.presetWidthIdx = nil
-            column.isFullWidth = false
-            column.savedWidth = nil
-            column.hasManualSingleWindowWidthOverride = true
-            changed = true
-
-            if resize.edges.contains(.left), let origOffset = resize.originalViewOffset {
-                let widthDelta = column.cachedWidth - originalWidth
-                viewportState { state in
-                    state.jumpOffset(to: origOffset + widthDelta)
-                }
-            }
-        }
-        return changed
+        guard context.resize.edges.hasHorizontal else { return false }
+        return resizeColumnPrimarySpan(column, context: context, viewportState: viewportState)
     }
 
     func resizeHorizontalWindow(
@@ -150,41 +112,69 @@ extension NiriLayoutEngine {
         _ column: NiriContainer, context: ResizeUpdateContext,
         viewportState: ((inout ViewportState) -> Void) -> Void
     ) -> Bool {
+        guard context.resize.edges.hasVertical else { return false }
+        return resizeColumnPrimarySpan(column, context: context, viewportState: viewportState)
+    }
+
+    private func resizeColumnPrimarySpan(
+        _ column: NiriContainer, context: ResizeUpdateContext,
+        viewportState: ((inout ViewportState) -> Void) -> Void
+    ) -> Bool {
         let resize = context.resize
-        let delta = context.delta
-        let monitorFrame = context.monitorFrame
-        let gaps = context.gaps
-        var changed = false
-        if resize.edges.hasVertical, let originalHeight = resize.originalContainerSpan {
-            var dy = delta.y
-
-            if resize.edges.contains(.bottom) {
-                dy = -dy
+        guard let originalSpan = resize.originalContainerSpan else { return false }
+        let horizontal = resize.orientation == .horizontal
+        let leadingEdge = horizontal ? resize.edges.contains(.left) : resize.edges.contains(.bottom)
+        let delta = horizontal ? context.delta.x : context.delta.y
+        let gap = horizontal ? context.gaps.horizontal : context.gaps.vertical
+        let workingSpan = horizontal ? context.monitorFrame.width : context.monitorFrame.height
+        let bounds = horizontal
+            ? projectedWidthBounds(for: column, workspaceId: resize.workspaceId)
+            : projectedHeightBounds(for: column, workspaceId: resize.workspaceId)
+        let viewportMaxSpan = workingSpan - 2 * gap
+        let maximumSpan = max(bounds.min, min(viewportMaxSpan, bounds.max ?? viewportMaxSpan))
+        let requestedSpan = originalSpan + (leadingEdge ? -delta : delta)
+        let span = constrainedProjectedPrimarySpan(
+            requestedSpan.clamped(to: bounds.min ... maximumSpan),
+            for: NiriProjectedColumn(
+                column: column,
+                windows: projectedWindows(in: column, workspaceId: resize.workspaceId),
+                durableIndex: resize.columnIndex
+            ),
+            workingFrame: context.monitorFrame,
+            gap: gap,
+            orientation: resize.orientation
+        )
+        let currentSpan = horizontal ? column.cachedWidth : column.cachedHeight
+        guard span != currentSpan else { return false }
+        beginManualPrimarySpanResize(column, in: resize.workspaceId, orientation: resize.orientation)
+        applyPrimarySpanResize(span, to: column, orientation: resize.orientation)
+        if leadingEdge, let originalOffset = resize.originalViewOffset {
+            viewportState { state in
+                state.jumpOffset(to: originalOffset + span - originalSpan)
             }
+        }
+        return true
+    }
 
-            let heightBounds = projectedHeightBounds(for: column, workspaceId: resize.workspaceId)
-            let minHeight = heightBounds.min
-            let viewportMaxHeight = monitorFrame.height - 2 * gaps.vertical
-            let maxHeight = max(
-                minHeight,
-                min(viewportMaxHeight, heightBounds.max ?? viewportMaxHeight)
-            )
-
-            let newHeight = originalHeight + dy
-            column.cachedHeight = newHeight.clamped(to: minHeight ... maxHeight)
-            column.height = .fixed(column.cachedHeight)
+    private func applyPrimarySpanResize(
+        _ span: CGFloat, to column: NiriContainer, orientation: Monitor.Orientation
+    ) {
+        switch orientation {
+        case .horizontal:
+            column.widthAnimation = nil
+            column.targetWidth = nil
+            column.cachedWidth = span
+            column.width = .fixed(span)
+            column.presetWidthIdx = nil
+            column.isFullWidth = false
+            column.savedWidth = nil
+            column.hasManualSingleWindowWidthOverride = true
+        case .vertical:
+            column.cachedHeight = span
+            column.height = .fixed(span)
             column.isFullHeight = false
             column.savedHeight = nil
             column.hasManualSingleWindowHeightOverride = true
-            changed = true
-
-            if resize.edges.contains(.bottom), let origOffset = resize.originalViewOffset {
-                let heightDelta = column.cachedHeight - originalHeight
-                viewportState { state in
-                    state.jumpOffset(to: origOffset + heightDelta)
-                }
-            }
         }
-        return changed
     }
 }

@@ -27,7 +27,7 @@ extension ViewportState {
             return
         }
 
-        springOffset(to: offset, config: config)
+        springOffset(to: offset, config: motion.scaled(config ?? .niriHorizontalViewMovement))
     }
 
     mutating func cancelAnimation() {
@@ -50,7 +50,7 @@ extension ViewportState {
 
     mutating func animateViewOffsetRestore(_ offset: CGFloat, motion: MotionSnapshot) {
         if motion.animationsEnabled {
-            springOffset(to: offset)
+            springOffset(to: offset, config: motion.scaled(.niriHorizontalViewMovement))
         } else {
             jumpOffset(to: offset)
         }

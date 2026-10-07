@@ -134,7 +134,8 @@ jobs:
         run: |
           APP="dist/OmniWM Pebble.app"
           VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")
-          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]
+          # Pebble app versions must include a fork revision distinct from upstream.
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[1-9][0-9]*$ ]]
           ARCHIVE="OmniWM-Pebble-v${VERSION}-fork.${GITHUB_RUN_NUMBER}-arm64.zip"
           mkdir -p release-assets
           ditto -c -k --keepParent "$APP" "release-assets/$ARCHIVE"

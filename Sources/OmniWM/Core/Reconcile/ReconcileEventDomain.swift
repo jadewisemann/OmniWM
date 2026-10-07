@@ -30,6 +30,7 @@ extension WMEvent {
              .managedReplacementMetadataChanged,
              .hiddenApplicationsChanged,
              .windowMinimizedChanged,
+             .windowNativeWithdrawalChanged,
              .appVisibilityInvalidated,
              .hiddenStateChanged,
              .nativeFullscreenTransition:

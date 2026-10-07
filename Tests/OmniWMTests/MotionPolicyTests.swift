@@ -7,6 +7,16 @@ import XCTest
 
 @MainActor
 final class MotionPolicyTests: XCTestCase {
+    func testSpeedObserversNormalizeWithoutReenteringForValidValues() {
+        let policy = MotionPolicy(animationSpeed: 2)
+        XCTAssertEqual(policy.snapshot().animationSpeed, 2)
+        for (value, expected) in [(Double.nan, 1.0), (.infinity, 1), (0, 0.25), (10, 4), (2, 2)] {
+            policy.animationSpeed = value
+            XCTAssertEqual(policy.animationSpeed, expected)
+            XCTAssertEqual(policy.snapshot().animationSpeed, expected)
+        }
+    }
+
     func testSystemReduceMotionMasksUserToggleWithoutOverwritingIt() {
         let policy = MotionPolicy(animationsEnabled: true)
         XCTAssertTrue(policy.animationsEnabled)
@@ -52,6 +62,15 @@ final class MotionPolicyTests: XCTestCase {
         )
         controller.motionPolicy.systemReducesMotion = true
 
+        controller.setAnimationSpeed(2)
+        XCTAssertEqual(settings.animationSpeed, 2)
+        XCTAssertEqual(controller.motionPolicy.snapshot().animationSpeed, 2)
+        XCTAssertFalse(controller.motionPolicy.snapshot().animationsEnabled)
+
+        controller.setAnimationSpeed(10)
+        XCTAssertEqual(settings.animationSpeed, 4)
+        XCTAssertEqual(controller.motionPolicy.animationSpeed, 4)
+
         controller.setAnimationsEnabled(false)
         XCTAssertFalse(settings.animationsEnabled)
         XCTAssertFalse(controller.motionPolicy.userAnimationsEnabled)
@@ -63,5 +82,6 @@ final class MotionPolicyTests: XCTestCase {
 
         controller.motionPolicy.systemReducesMotion = false
         XCTAssertTrue(controller.motionPolicy.animationsEnabled)
+        XCTAssertEqual(controller.motionPolicy.snapshot().animationSpeed, 4)
     }
 }

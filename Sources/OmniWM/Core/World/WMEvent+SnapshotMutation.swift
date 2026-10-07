@@ -19,6 +19,7 @@ extension WMEvent {
              .focusRemembered,
              .hiddenApplicationsChanged,
              .windowMinimizedChanged,
+             .windowNativeWithdrawalChanged,
              .hiddenStateChanged,
              .interactionMonitorChanged,
              .layoutOperationPerformed,

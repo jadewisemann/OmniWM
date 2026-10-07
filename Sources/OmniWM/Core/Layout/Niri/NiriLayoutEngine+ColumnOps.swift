@@ -100,7 +100,7 @@ extension NiriLayoutEngine {
             window.animateMoveFrom(
                 displacement: displacement,
                 clock: animationClock,
-                config: windowMovementAnimationConfig,
+                config: context.motion.scaled(windowMovementAnimationConfig),
                 displayRefreshRate: displayRefreshRate(in: context.workspaceId),
                 animated: context.motion.animationsEnabled
             )
@@ -247,6 +247,10 @@ extension NiriLayoutEngine {
         let columns = projectedColumns(in: workspaceId)
         guard !columns.isEmpty else { return false }
 
+        for projectedColumn in columns {
+            beginManualPrimarySpanResize(projectedColumn.column, in: workspaceId, orientation: orientation)
+        }
+
         let resolvedWidth = resolvedContainerResetPrimarySpan(in: workspaceId)
         switch orientation {
         case .horizontal:
@@ -265,7 +269,7 @@ extension NiriLayoutEngine {
                         to: projectedWidthBounds(for: column, workspaceId: workspaceId)
                     ),
                     clock: animationClock,
-                    config: windowMovementAnimationConfig,
+                    config: motion.scaled(windowMovementAnimationConfig),
                     displayRefreshRate: displayRefreshRate(in: workspaceId),
                     animated: motion.animationsEnabled
                 )

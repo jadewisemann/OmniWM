@@ -215,6 +215,10 @@ enum WorkspaceBarIslandSlice: Hashable {
     case active
     case secondary
 
+    var showsOmniWMButton: Bool {
+        self != .secondary
+    }
+
     func items(in snapshot: WorkspaceBarSnapshot) -> [WorkspaceBarItem] {
         switch self {
         case .all: snapshot.items
@@ -232,6 +236,7 @@ enum WorkspaceBarIslandSlice: Hashable {
 final class WorkspaceBarModel {
     var snapshot: WorkspaceBarSnapshot
     var presentedWindowList: WindowToken?
+    var hiddenBarJoinEdge: PopupAttachment.Edge?
 
     init(snapshot: WorkspaceBarSnapshot) {
         self.snapshot = snapshot

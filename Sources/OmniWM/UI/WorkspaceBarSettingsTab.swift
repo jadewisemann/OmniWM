@@ -73,6 +73,29 @@ private struct GlobalBarSettingsSection: View {
                         controller.updateWorkspaceBarSettings()
                     }
 
+                Picker("Notification Badges", selection: Bindable(settings.workspaceBar).notificationBadges) {
+                    Text("Off").tag(WorkspaceBarNotificationBadgeMode.off)
+                    Text("Dot").tag(WorkspaceBarNotificationBadgeMode.dot)
+                    Text("Text").tag(WorkspaceBarNotificationBadgeMode.text)
+                }
+                .onChange(of: settings.workspaceBar.notificationBadges) { _, _ in
+                    controller.updateWorkspaceBarNotificationBadgeSettings()
+                }
+
+                SettingsSliderRow(
+                    label: String(localized: "Refresh Interval"),
+                    value: Bindable(settings.workspaceBar).notificationBadgeRefreshIntervalSeconds,
+                    range: 1 ... 60,
+                    step: 1,
+                    valueText: String(
+                        localized: "\(Int(settings.workspaceBar.notificationBadgeRefreshIntervalSeconds)) s"
+                    )
+                )
+                .disabled(settings.workspaceBar.notificationBadges == .off)
+                .onChange(of: settings.workspaceBar.notificationBadgeRefreshIntervalSeconds) { _, _ in
+                    controller.updateWorkspaceBarNotificationBadgeSettings()
+                }
+
                 Toggle("Show Workspace Labels", isOn: Bindable(settings.workspaceBar).showLabels)
                     .onChange(of: settings.workspaceBar.showLabels) { _, _ in
                         controller.updateWorkspaceBarSettings()
@@ -148,7 +171,7 @@ private struct GlobalBarSettingsSection: View {
                     controller.updateWorkspaceBarSettings()
                 }
                 .help(
-                    "Move below the notch, split around it, or fill the area to its left, covering application menus. Without a notch, Fill Left covers the left half of the menu bar. Notch modes are ignored at Bottom, Left, and Right."
+                    "Move below the menu bar, place it to the right of the notch (centered on displays without a notch), split around it, or fill the area to its left, covering application menus. Without a notch, Fill Left covers the left half of the menu bar. Notch modes are ignored at Bottom, Left, and Right."
                 )
 
                 if settings.workspaceBar.notchMode.isSplit {

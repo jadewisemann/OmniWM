@@ -207,11 +207,11 @@ final class AppAXContext {
         }
     }
 
-    func setWindowMinimized(_ minimized: Bool, for windowId: Int) {
-        if minimized {
+    func setWindowNativeSuppressed(_ suppressed: Bool, for windowId: Int) {
+        if suppressed {
             cancelRetryRaise(for: windowId)
         }
-        frameDelivery.setWindowMinimized(minimized, for: windowId)
+        frameDelivery.setWindowNativeSuppressed(suppressed, for: windowId)
     }
 
     func makeFrameDrainExecution(drainId: UInt64, lane: AppAXFrameLane) -> AppAXFrameDrainExecution {
