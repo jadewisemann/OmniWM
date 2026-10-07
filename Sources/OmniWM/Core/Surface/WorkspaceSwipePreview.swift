@@ -225,8 +225,8 @@ final class WorkspaceSwipePreview {
         CATransaction.commit()
     }
 
-    func beginWindowDeparture(item: Item, monitor: Monitor, offset: CGVector) -> Bool {
-        guard panel == nil, hasCaptureAccess(), tokens[item.handle] == item.handle.token,
+    func beginWindowDeparture(item: Item, monitor: Monitor, offset: CGVector, motion: MotionSnapshot) -> Bool {
+        guard motion.animationsEnabled, panel == nil, hasCaptureAccess(), tokens[item.handle] == item.handle.token,
               let preview = capture.preview(for: item.handle)
         else { return false }
 
@@ -268,7 +268,8 @@ final class WorkspaceSwipePreview {
         fade.toValue = 0.15
         let group = CAAnimationGroup()
         group.animations = [animation, fade]
-        group.duration = 0.24
+        let duration = 0.24 / motion.animationSpeed
+        group.duration = duration
         group.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
         group.isRemovedOnCompletion = false
         group.fillMode = .forwards
@@ -276,7 +277,7 @@ final class WorkspaceSwipePreview {
         content.layer.opacity = 0.15
         content.layer.add(group, forKey: "workspace-window-departure")
         departureCleanupTask = Task { @MainActor [weak self, weak panel] in
-            try? await Task.sleep(for: .milliseconds(250))
+            try? await Task.sleep(for: .seconds(duration + 0.01))
             guard !Task.isCancelled, let self, self.panel === panel else { return }
             self.stop()
             self.onDepartureFinished()

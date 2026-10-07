@@ -90,7 +90,12 @@ final class WorkspaceSwipeMotion {
     }
 
     @discardableResult
-    func settle(to destination: Double, timestamp: TimeInterval, animationTime: TimeInterval) -> Bool {
+    func settle(
+        to destination: Double,
+        timestamp: TimeInterval,
+        animationTime: TimeInterval,
+        motion: MotionSnapshot = .enabled
+    ) -> Bool {
         guard spring == nil, timestamp.isFinite, timestamp >= lastTimestamp,
               animationTime.isFinite, (0 ... 1).contains(destination) else { return false }
         target = destination
@@ -100,7 +105,7 @@ final class WorkspaceSwipeMotion {
             to: destination,
             initialVelocity: 0,
             startTime: animationTime,
-            config: Self.springConfig
+            config: motion.scaled(Self.springConfig)
         )
         return true
     }

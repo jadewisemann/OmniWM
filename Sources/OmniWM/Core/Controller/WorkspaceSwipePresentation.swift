@@ -358,8 +358,10 @@ final class WorkspaceSwipePresentation {
         refreshController.stopScrollAnimation(for: flight.preparation.monitor.displayId)
         refreshController.stopDwindleAnimation(for: flight.preparation.monitor.displayId)
         let timestamp = mediaTimeProvider()
-        guard flight.motion.settle(to: 1, timestamp: timestamp, animationTime: timestamp),
-              let link = refreshController.getOrCreateDisplayLink(for: flight.preparation.monitor.displayId)
+        guard flight.motion.settle(
+            to: 1, timestamp: timestamp, animationTime: timestamp, motion: controller.motionPolicy.snapshot()
+        ),
+            let link = refreshController.getOrCreateDisplayLink(for: flight.preparation.monitor.displayId)
         else {
             preview.stop()
             refreshController.stopDisplayLinkIfIdle(for: flight.preparation.monitor.displayId)

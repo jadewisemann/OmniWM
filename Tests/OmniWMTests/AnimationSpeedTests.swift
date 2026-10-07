@@ -130,4 +130,21 @@ final class AnimationSpeedTests: XCTestCase {
             }
         }
     }
+
+    func testProgrammaticWorkspaceSwitchScalesItsEntireSettlingCurve() {
+        let baseline = WorkspaceSwipeMotion(cumulativeUnits: 0, timestamp: 1)
+        XCTAssertTrue(baseline.settle(to: 1, timestamp: 1, animationTime: 0))
+        for speed in [0.25, 2, 4] {
+            let motion = WorkspaceSwipeMotion(cumulativeUnits: 0, timestamp: 1)
+            XCTAssertTrue(motion.settle(
+                to: 1, timestamp: 1, animationTime: 0,
+                motion: .init(animationsEnabled: true, animationSpeed: speed)
+            ))
+            XCTAssertEqual(motion.target, 1)
+            for elapsed in [0.01, 0.1, 0.3, 0.6] {
+                XCTAssertEqual(motion.progress(at: elapsed / speed), baseline.progress(at: elapsed), accuracy: 0.000001)
+                XCTAssertEqual(motion.isComplete(at: elapsed / speed), baseline.isComplete(at: elapsed))
+            }
+        }
+    }
 }
