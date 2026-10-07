@@ -1,8 +1,10 @@
-> **OmniWM Pebble — personal fork:** This repository combines official OmniWM v0.7.5 with the monitor shortcuts below. Download `OmniWM Pebble.app` from [jadewisemann/OmniWM Releases](https://github.com/jadewisemann/OmniWM/releases). Fork app archives are ad-hoc development-signed and are not Apple-notarized; macOS may require approval in Privacy & Security and renewed Accessibility access. Official signed and notarized releases remain available from [OmniNull/OmniWM](https://github.com/OmniNull/OmniWM/releases).
+> **OmniWM Pebble v0.7.5.1 — personal fork:** This repository combines official OmniWM v0.7.5 with the monitor shortcuts below. Download `OmniWM Pebble.app` from [jadewisemann/OmniWM Releases](https://github.com/jadewisemann/OmniWM/releases). Fork app archives are ad-hoc development-signed and are not Apple-notarized; macOS may require approval in Privacy & Security and renewed Accessibility access. Official signed and notarized releases remain available from [OmniNull/OmniWM](https://github.com/OmniNull/OmniWM/releases).
 >
 > GitHub Actions packages an arm64 app ZIP after verification and tests succeed. The app archive, SHA-256 checksum, and source commit are available in the `omniwm-fork-app` artifact; publishing a GitHub Release is a separate step.
 
 ## OmniWM Pebble
+
+Pebble app versions add a numeric fork revision to the upstream version: upstream `0.7.5` becomes Pebble `0.7.5.1`. Increment the final component for subsequent Pebble revisions, and start it at `1` when adopting a new upstream release. Keep this distinct version in the app's `CFBundleShortVersionString` and release filenames; a CI run number alone does not distinguish the app version.
 
 The app is named `OmniWM Pebble.app` and uses the existing configuration at `~/.config/omniwm/settings.toml`, state at `~/.local/state/omniwm/`, and `omniwmctl` command. XDG config/state overrides still apply. The app keeps its fork schema and monitor shortcuts; it uses one settings file without an additional compatibility format.
 
