@@ -45,8 +45,7 @@ OmniWM uses public macOS frameworks and selected private Apple APIs. This enable
 not expose, but private interfaces can change in a future macOS release. OmniWM therefore pins a strict supported
 macOS baseline and validates new releases against that baseline.
 
-Hidden Bar concealment dynamically loads the private MenuBarClientCore framework and is available only on macOS 27
-or later. Core window management supports macOS 26.
+Hidden Bar uses macOS per-app menu-bar visibility preferences, whose stored format is private to macOS.
 
 ## Current functional limitations
 

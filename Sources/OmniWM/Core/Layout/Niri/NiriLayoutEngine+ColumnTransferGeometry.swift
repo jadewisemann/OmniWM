@@ -39,6 +39,10 @@ extension NiriLayoutEngine {
         from snapshot: ColumnMutationSnapshot,
         context: NiriInteractionContext
     ) -> NiriProjectedGeometrySnapshot {
+        resolvePrimaryContainerSpans(
+            in: context.workspaceId, workingFrame: context.workingFrame,
+            gaps: context.gaps, orientation: context.orientation, motion: context.motion
+        )
         let geometry = projectedGeometrySnapshot(
             in: context.workspaceId, workingFrame: context.workingFrame,
             gaps: context.gaps, orientation: context.orientation

@@ -99,6 +99,8 @@ final class NiriWorkspaceState {
     let root: NiriRoot
     var nodesByToken: [WindowToken: NiriWindow] = [:]
     var attachedMonitorId: Monitor.ID?
+    var manualWidthColumnCount: Int?
+    var manualHeightColumnCount: Int?
 
     init(workspaceId: WorkspaceDescriptor.ID) {
         root = NiriRoot(workspaceId: workspaceId)

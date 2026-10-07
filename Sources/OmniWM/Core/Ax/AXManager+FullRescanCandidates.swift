@@ -51,6 +51,8 @@ extension AXManager {
             targetPIDsByDependencyPID: enumeration.coverage.targetPIDsByDependencyPID
         )
 
+        try await updateFullRescanOrdering(&selected)
+        try Task.checkCancellation()
         recordSelectedFullRescanCandidates(selected)
         return enumeration.snapshot(
             selected: selected,
@@ -58,6 +60,23 @@ extension AXManager {
             successfullyEnumeratedPIDs: successfullyEnumeratedPIDs,
             authoritativeTargetPIDs: authoritativeTargetPIDs
         )
+    }
+
+    private func updateFullRescanOrdering(_ selected: inout [FullRescanWindowCandidate]) async throws {
+        let orderedWindowIds = Set(selected.compactMap { UInt32(exactly: $0.windowId) })
+        if !orderedWindowIds.isEmpty,
+           let ordering = try await fullRescanWindowOrderingProvider(orderedWindowIds)
+        {
+            for index in selected.indices {
+                let candidate = selected[index]
+                guard let windowId = UInt32(exactly: candidate.windowId),
+                      let info = ordering[windowId],
+                      info.id == windowId,
+                      info.pid == (candidate.windowServerOwnerPID ?? candidate.pid)
+                else { continue }
+                selected[index].windowServerInfo = info
+            }
+        }
     }
 
     func collectFullRescanCandidates(

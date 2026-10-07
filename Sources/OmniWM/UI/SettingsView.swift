@@ -102,6 +102,24 @@ struct GeneralSettingsTab: View {
                         : String(localized: "Turns OmniWM-authored animations on or off live without relaunching.")
                 )
 
+                SettingsSliderRow(
+                    label: String(localized: "Tiling Animation Speed"),
+                    value: Binding(
+                        get: { controller.motionPolicy.animationSpeed },
+                        set: { controller.setAnimationSpeed($0) }
+                    ),
+                    range: AnimationSpeed.range,
+                    step: 0.25,
+                    valueText: String(
+                        localized: "\(controller.motionPolicy.animationSpeed.formatted(.number.precision(.fractionLength(0 ... 2))))×"
+                    ),
+                    resetAction: { controller.setAnimationSpeed(SettingsExport.defaults().animationSpeed) }
+                )
+                .disabled(!controller.motionPolicy.animationsEnabled)
+                SettingsCaption(
+                    localized: "1× is the default. Higher values make window and workspace transitions faster."
+                )
+
                 AppWindowCornerSettings(preferences: windowCornerPreferences)
             }
 

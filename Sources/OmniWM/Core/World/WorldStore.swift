@@ -204,6 +204,12 @@ final class WorldStore {
             model.setObservedState(state, for: token)
             refreshProjectionExclusions(in: [workspaceId])
 
+        case let .windowNativeWithdrawalChanged(token, workspaceId, withdrawn, _):
+            guard var state = windows.entry(for: token)?.observedState else { return }
+            state.isNativeWithdrawn = withdrawn
+            model.setObservedState(state, for: token)
+            refreshProjectionExclusions(in: [workspaceId])
+
         case let .appVisibilityInvalidated(pid, _, _):
             appVisibilityGenerationByPID[pid, default: 0] &+= 1
 

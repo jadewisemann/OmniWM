@@ -221,7 +221,8 @@ extension NiriLayoutEngine {
             in: context.workspaceId,
             workingFrame: context.workingFrame,
             gaps: context.gaps,
-            orientation: context.orientation
+            orientation: context.orientation,
+            motion: context.motion
         )
         let containers = columns(in: context.workspaceId)
         guard !containers.isEmpty else { return }
@@ -263,8 +264,16 @@ extension NiriLayoutEngine {
         in workspaceId: WorkspaceDescriptor.ID,
         workingFrame: CGRect,
         gaps: CGFloat,
-        orientation: Monitor.Orientation
+        orientation: Monitor.Orientation,
+        motion: MotionSnapshot? = nil
     ) {
+        reconcilePrimarySpanFit(
+            in: workspaceId,
+            workingFrame: workingFrame,
+            gaps: gaps,
+            orientation: orientation,
+            motion: motion
+        )
         for container in columns(in: workspaceId) {
             switch orientation {
             case .horizontal where container.cachedWidth <= 0:

@@ -51,7 +51,7 @@ extension DwindleLayoutEngine {
                     oldFrame: oldFrame,
                     newFrame: newFrame,
                     startTime: startTime,
-                    config: windowMovementAnimationConfig,
+                    config: motion.scaled(windowMovementAnimationConfig),
                     animated: motion.animationsEnabled
                 )
             }

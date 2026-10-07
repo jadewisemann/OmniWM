@@ -7,6 +7,38 @@ import XCTest
 
 @MainActor
 final class SkyLightNativeSpaceInventoryLiveTests: XCTestCase {
+    func testLiveDeferredOrderingTracksOffscreenWithdrawalAndReopening() async throws {
+        try requireLiveTestsEnabled()
+        let sky = SkyLight.shared
+        let wid = sky.createBorderWindow(frame: CGRect(x: 0, y: 0, width: 10, height: 10))
+        guard wid != 0 else {
+            throw XCTSkip("Unable to create an owned SkyLight test window")
+        }
+        defer {
+            sky.releaseBorderWindow(wid)
+            sky.stopWindowInfoQueries()
+        }
+        XCTAssertTrue(sky.moveWindow(wid, to: CGPoint(x: -9000, y: -9000)))
+
+        for expected in [false, true, false, true] {
+            sky.orderWindow(wid, relativeTo: 0, order: expected ? .above : .out)
+            XCTAssertEqual(sky.isWindowOrderedIn(wid), expected)
+
+            let result = try await sky.queryWindowInfoDeferred(
+                windowIds: [wid, UInt32.max],
+                includeOrderedIn: true
+            )
+            let info = try XCTUnwrap(result?[wid])
+            XCTAssertEqual(info.isOrderedIn, expected)
+            XCTAssertEqual(info.pid, getpid())
+            XCTAssertEqual(info.frame.origin, CGPoint(x: -9000, y: -9000))
+            XCTAssertNil(result?[UInt32.max])
+        }
+
+        let metadata = try await sky.queryWindowInfoDeferred(windowIds: [wid])
+        XCTAssertNil(try XCTUnwrap(metadata?[wid]).isOrderedIn)
+    }
+
     func testLiveAboveOrdersWindowBackIn() async throws {
         try requireLiveTestsEnabled()
         let sky = SkyLight.shared

@@ -234,7 +234,7 @@ extension NiriLayoutEngine {
     ) {
         column.animateMoveFrom(
             displacement: primaryDisplacement(displacement, orientation: context.orientation),
-            clock: animationClock, config: windowMovementAnimationConfig,
+            clock: animationClock, config: context.motion.scaled(windowMovementAnimationConfig),
             displayRefreshRate: displayRefreshRate(in: context.workspaceId),
             animated: context.motion.animationsEnabled
         )

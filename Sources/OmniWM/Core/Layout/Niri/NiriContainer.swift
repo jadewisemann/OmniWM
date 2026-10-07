@@ -37,6 +37,8 @@ class NiriContainer: NiriNode {
 
     var widthAnimation: SpringAnimation?
     var targetWidth: CGFloat?
+    var fittedWidth: CGFloat?
+    var fittedHeight: CGFloat?
 
     var settledWidth: CGFloat {
         targetWidth ?? cachedWidth

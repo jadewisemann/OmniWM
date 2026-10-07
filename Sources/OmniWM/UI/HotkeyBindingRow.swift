@@ -14,7 +14,7 @@ struct HotkeyBindingRow: View {
     let failureReason: HotkeyRegistrationFailureReason?
     let isHyperActive: () -> Bool
     let onStartChordRecording: (String) -> Void
-    let onChordCaptured: (String, KeyBinding) -> Void
+    let onChordCaptured: (String, HotkeyTrigger) -> Void
     let onCancelRecording: () -> Void
     let onClearBinding: (String) -> Void
     let onResetBindings: (String) -> Void
@@ -127,7 +127,7 @@ private struct HotkeyBindingControl: View {
     let isRecordingChord: Bool
     let isHyperActive: () -> Bool
     let onStartChordRecording: () -> Void
-    let onCaptured: (KeyBinding) -> Void
+    let onCaptured: (HotkeyTrigger) -> Void
     let onCancel: () -> Void
     let onRemove: () -> Void
     let onSetSide: (ModifierSide) -> Void
@@ -149,7 +149,7 @@ private struct HotkeyBindingControl: View {
                         onStartChordRecording()
                     } label: {
                         Text(displayString)
-                            .font(.system(.body, design: .monospaced))
+                            .font(.body)
                             .lineLimit(1)
                             .frame(minWidth: 112, alignment: .center)
                     }

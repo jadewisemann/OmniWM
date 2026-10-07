@@ -89,14 +89,8 @@ final class FloatingWindowRaiser {
         guard let controller else { return nil }
 
         let managedSurfaces = controller.workspaceManager.visibleWorkspaceIds()
-            .flatMap { workspaceId in
-                controller.workspaceManager.floatingEntries(in: workspaceId)
-            }
-            .filter { entry in
-                entry.layoutReason == .standard
-                    && !controller.workspaceManager.isWindowSuppressedByMacOS(entry.token)
-                    && !controller.workspaceManager.isHiddenInCorner(entry.token)
-            }
+            .flatMap { controller.workspaceManager.floatingEntries(in: $0) }
+            .filter { controller.workspaceManager.isFloatingWindowDisplayable($0) }
             .map(RaisableSurface.managed)
         let ownedSurfaces = visibleOwnedWindowsProvider()
             .filter { $0.windowNumber > 0 }

@@ -46,7 +46,8 @@ final class WindowRuleEngine {
     }
 
     func requiresTitle(for bundleId: String?, appName: String? = nil) -> Bool {
-        titleRules.contains { $0.matchesApp(bundleId: bundleId, appName: appName) }
+        eligibilityPolicy.requiresPictureInPictureTitle(for: bundleId)
+            || titleRules.contains { $0.matchesApp(bundleId: bundleId, appName: appName) }
     }
 
     func rebuild(rules: [AppRule]) {
@@ -101,6 +102,12 @@ final class WindowRuleEngine {
             return decision
         case let .matched(selected):
             matches = selected
+        }
+        if facts.ax.role == (kAXWindowRole as String),
+           facts.ax.title == nil,
+           eligibilityPolicy.requiresPictureInPictureTitle(for: facts.ax.bundleId)
+        {
+            return matches.fallbackDecision(disposition: .undecided, deferredReason: .requiredTitleMissing)
         }
         if let decision = matches.explicitDecision(for: facts) {
             return decision

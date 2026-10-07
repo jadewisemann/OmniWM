@@ -203,7 +203,8 @@ final class WorkspaceSwipePresentation {
     func release(timestamp: TimeInterval, allowFlick: Bool) -> Bool {
         guard let flight, !flight.committing else { return false }
         guard flight.motion.release(
-            timestamp: timestamp, allowFlick: allowFlick, animationTime: mediaTimeProvider()
+            timestamp: timestamp, allowFlick: allowFlick, animationTime: mediaTimeProvider(),
+            motion: controller?.motionPolicy.snapshot() ?? .enabled
         ) else {
             cancel(reason: "invalid-release")
             return true
@@ -494,6 +495,15 @@ final class WorkspaceSwipePresentation {
 extension WorkspaceSwipePresentation {
     func windowRemoved(_ token: WindowToken) {
         preview?.remove(token: token)
+    }
+
+    func syncAvailability() {
+        guard let controller, preview != nil,
+              !controller.motionPolicy.animationsEnabled || !controller.settings.gestures.workspaceSwipeEnabled
+        else { return }
+        cancel(reason: "disabled")
+        preview?.release()
+        preview = nil
     }
 
     func previewSurface(_ controller: WMController) -> WorkspaceSwipePreview {

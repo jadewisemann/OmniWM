@@ -571,6 +571,7 @@ final class NiriPortraitSizingTests: NiriInteractionTestCase {
         XCTAssertEqual(try XCTUnwrap(frames[fixture.first.token]).width, 450, accuracy: 0.001)
         XCTAssertEqual(try XCTUnwrap(frames[fixture.second.token]).width, 450, accuracy: 0.001)
         XCTAssertEqual(fixture.column.width, .fixed(700))
+        XCTAssertEqual(fixture.column.height, .proportion(0.5))
         XCTAssertEqual(fixture.first.height, .fixed(250))
     }
 }

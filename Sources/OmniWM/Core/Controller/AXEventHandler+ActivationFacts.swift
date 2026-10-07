@@ -55,7 +55,6 @@ extension AXEventHandler {
         controller.workspaceManager.setSystemModalFocus(focusedWindow.isSystemModalSurface ? token : nil)
 
         if let entry = controller.workspaceManager.entry(for: token) {
-            guard !entry.observedState.isMinimized else { return }
             handleTrackedActivationFacts(
                 entry,
                 observation: observation,
@@ -89,6 +88,13 @@ extension AXEventHandler {
         controller: WMController
     ) {
         let facts = observation.facts
+        guard !entry.observedState.isMinimized else { return }
+        if entry.observedState.isNativeWithdrawn {
+            if let windowId = UInt32(exactly: entry.windowId) {
+                enqueueLifecycleQuery(windowId: windowId, kind: .activation(facts))
+            }
+            return
+        }
         let source = facts.source
         let origin = facts.origin
         let appFullscreen = observation.focusedWindow.isFullscreen

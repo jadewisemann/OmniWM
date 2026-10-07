@@ -7221,14 +7221,16 @@ final class RuntimeArchitectureTests: XCTestCase {
         XCTAssertEqual(controller.workspaceManager.interactionMonitorId, rightMonitor.id)
         XCTAssertEqual(controller.workspaceManager.lastFocusedToken(in: rightWs), token)
         XCTAssertEqual(existingColumn.width, .fixed(targetColumnWidth))
-        XCTAssertEqual(existingColumn.cachedWidth, targetColumnWidth, accuracy: 0.001)
+        let geometry = controller.niriInteractionGeometry(for: rightMonitor)
+        let fittedWidth = geometry.workingFrame.width - geometry.innerGap * 2
+        XCTAssertEqual(existingColumn.cachedWidth, fittedWidth, accuracy: 0.001)
         XCTAssertTrue(existingColumn.hasManualSingleWindowWidthOverride)
 
         let plans = controller.workspaceManager.withEngineMutationScope {
             controller.niriLayoutHandler.layoutWithNiriEngine(activeWorkspaces: [rightWs])
         }
         XCTAssertFalse(plans.isEmpty)
-        XCTAssertEqual(try XCTUnwrap(movedNode.renderedFrame?.width), targetColumnWidth, accuracy: 0.001)
+        XCTAssertEqual(try XCTUnwrap(movedNode.renderedFrame?.width), fittedWidth, accuracy: 0.001)
     }
 
     @MainActor

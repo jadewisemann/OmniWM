@@ -7,6 +7,54 @@ import Foundation
 import XCTest
 
 final class SettingsTOMLCodecTests: XCTestCase {
+    func testScrollModifierChoicesRoundTripWithOptionShiftDefault() throws {
+        var export = SettingsExport.defaults()
+        XCTAssertEqual(export.gestures.scrollModifierKey, .optionShift)
+        for modifier in ScrollModifierKey.allCases {
+            export.gestures.scrollModifierKey = modifier
+            let data = try SettingsTOMLCodec.encode(export)
+            XCTAssertTrue(String(decoding: data, as: UTF8.self).contains(
+                "scrollModifierKey = \"\(modifier.rawValue)\""
+            ))
+            let result = try SettingsTOMLCodec.decodeForLoad(data)
+            XCTAssertEqual(result.export, export)
+            XCTAssertNil(result.migration)
+            XCTAssertNil(result.migratedData)
+        }
+    }
+
+    func testAnimationSpeedDefaultsAndRoundTrips() throws {
+        var export = SettingsExport.defaults()
+        XCTAssertEqual(export.animationSpeed, 1)
+        for speed in [0.25, 1, 1.75, 2, 4] {
+            export.animationSpeed = speed
+            let data = try SettingsTOMLCodec.encode(export)
+            XCTAssertEqual(try SettingsTOMLCodec.decode(data), export)
+            XCTAssertFalse(SettingsTOMLCodec.unknownKeyPaths(in: data).contains("general.animationSpeed"))
+        }
+    }
+
+    func testOmittedAnimationSpeedUsesDefaultWithoutMigration() throws {
+        let data = try canonicalDefaultLines { lines in
+            let index = try XCTUnwrap(lines.firstIndex { $0.hasPrefix("animationSpeed = ") })
+            lines.remove(at: index)
+        }
+        let result = try SettingsTOMLCodec.decodeForLoad(data)
+        XCTAssertEqual(result.export.animationSpeed, 1)
+        XCTAssertNil(result.migration)
+        XCTAssertNil(result.migratedData)
+    }
+
+    func testAnimationSpeedNormalizesOutOfRangeAndNonfiniteTOML() throws {
+        for (literal, expected) in [("0", 0.25), ("-2.0", 0.25), ("10.0", 4), ("nan", 1), ("inf", 1)] {
+            let data = try canonicalDefaultLines { lines in
+                let index = try XCTUnwrap(lines.firstIndex { $0.hasPrefix("animationSpeed = ") })
+                lines[index] = "animationSpeed = \(literal)"
+            }
+            XCTAssertEqual(try SettingsTOMLCodec.decode(data).animationSpeed, expected)
+        }
+    }
+
     func testTabRailAppIconsDefaultsAndRoundTrips() throws {
         var export = SettingsExport.defaults()
         XCTAssertFalse(export.tabRailAppIcons)

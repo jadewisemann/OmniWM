@@ -33,10 +33,45 @@ extension AXEventHandler {
         requestRefresh: Bool = true
     ) -> Bool {
         guard let controller,
-              let entry = controller.workspaceManager.entry(for: token),
-              entry.observedState.isMinimized != minimized
+              controller.workspaceManager.setWindowMinimized(minimized, token: token, source: source)
         else { return false }
-        if minimized {
+        refreshWindowNativeSuppression(
+            token: token,
+            reason: minimized ? .windowMinimized : .windowDeminiaturized,
+            requestRefresh: requestRefresh
+        )
+        return true
+    }
+
+    @discardableResult
+    func updateWindowNativeWithdrawalState(
+        _ withdrawn: Bool,
+        token: WindowToken,
+        source: WMEventSource = .ax,
+        requestRefresh: Bool = true
+    ) -> Bool {
+        guard let controller,
+              let entry = controller.workspaceManager.entry(for: token),
+              !withdrawn || (!controller.workspaceManager.isAppHidden(token)
+                  && !entry.observedState.isMinimized && !entry.observedState.isNativeFullscreen),
+              controller.workspaceManager.setWindowNativeWithdrawn(withdrawn, token: token, source: source)
+        else { return false }
+        refreshWindowNativeSuppression(
+            token: token,
+            reason: withdrawn ? .windowWithdrawn : .windowReopened,
+            requestRefresh: requestRefresh
+        )
+        return true
+    }
+
+    private func refreshWindowNativeSuppression(
+        token: WindowToken,
+        reason: RefreshReason,
+        requestRefresh: Bool
+    ) {
+        guard let controller, let entry = controller.workspaceManager.entry(for: token) else { return }
+        let suppressed = entry.observedState.isNativeSuppressed
+        if suppressed {
             controller.layoutRefreshController.cancelPendingScratchpadReveal(for: token)
             controller.dwindleLayoutHandler.groupReveals.cancelPendingGroupReveal(for: token)
             if let request = controller.intentLedger.activeManagedRequest, request.token == token {
@@ -45,17 +80,15 @@ extension AXEventHandler {
             controller.intentLedger.discardPendingFocus(token)
             controller.layoutRefreshController.cancelActiveAnimations(for: entry.workspaceId)
         }
-        controller.workspaceManager.setWindowMinimized(minimized, token: token, source: source)
-        controller.axManager.setWindowMinimized(minimized, token: token)
+        controller.axManager.setWindowNativeSuppressed(suppressed, token: token)
         controller.mouseEventHandler.handleAppVisibilityChanged()
         controller.windowActionHandler.refreshOverviewProjection(affectedWorkspaceIds: [entry.workspaceId])
         if requestRefresh {
             controller.layoutRefreshController.requestVisibilityRefresh(
-                reason: minimized ? .windowMinimized : .windowDeminiaturized,
+                reason: reason,
                 affectedWorkspaceIds: [entry.workspaceId]
             )
         }
         controller.surfaceReconciler.noteWorldChanged()
-        return true
     }
 }

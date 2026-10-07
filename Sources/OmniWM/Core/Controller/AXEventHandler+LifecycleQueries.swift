@@ -13,6 +13,7 @@ extension AXEventHandler {
         case spaceDestroyed
         case closed
         case orderChanged
+        case activation(ActivationFacts)
     }
 
     struct LifecycleCreateRequest {
@@ -42,7 +43,9 @@ extension AXEventHandler {
 
     struct LifecycleQueries {
         var query: @MainActor (UInt32) async throws -> WindowServerInfo? = {
-            guard let result = try await SkyLight.shared.queryWindowInfoDeferred(windowIds: [$0]) else {
+            guard let result = try await SkyLight.shared.queryWindowInfoDeferred(
+                windowIds: [$0], includeOrderedIn: true
+            ) else {
                 throw LifecycleQueryError.unavailable
             }
             return result[$0]
@@ -57,6 +60,7 @@ extension AXEventHandler {
 
     func enqueueLifecycleQuery(windowId: UInt32, kind: LifecycleQueryKind) {
         guard let controller, !controller.isOwnedWindow(windowNumber: Int(windowId)) else { return }
+        guard !coalescePendingLifecycleQuery(windowId: windowId, kind: kind) else { return }
         if case let .created(create) = kind,
            let previous = lifecycleQueries.pending.last(where: { $0.windowId == windowId })
            ?? lifecycleQueries.active.flatMap({ $0.windowId == windowId ? $0 : nil }),
@@ -71,20 +75,12 @@ extension AXEventHandler {
         {
             return
         }
-        if case .orderChanged = kind,
-           lifecycleQueries.pending.contains(where: {
-               guard $0.windowId == windowId else { return false }
-               if case .orderChanged = $0.kind { return true }
-               return false
-           })
-        {
-            return
-        }
         let destructionIdentity: LifecycleIdentity? = switch kind {
         case .closed,
              .spaceDestroyed: lifecycleIdentity(windowId: windowId)
         case .created,
-             .orderChanged: nil
+             .orderChanged,
+             .activation: nil
         }
         let query = LifecycleQuery(
             sequence: lifecycleQueries.nextSequence, windowId: windowId,
@@ -102,6 +98,26 @@ extension AXEventHandler {
             guard !Task.isCancelled else { return }
             self?.lifecycleQueries.task = nil
         }
+    }
+
+    private func coalescePendingLifecycleQuery(windowId: UInt32, kind: LifecycleQueryKind) -> Bool {
+        switch kind {
+        case .activation:
+            lifecycleQueries.pending.removeAll {
+                guard $0.windowId == windowId else { return false }
+                if case .activation = $0.kind { return true }
+                return false
+            }
+        case .orderChanged:
+            return lifecycleQueries.pending.contains {
+                guard $0.windowId == windowId else { return false }
+                if case .orderChanged = $0.kind { return true }
+                return false
+            }
+        default:
+            break
+        }
+        return false
     }
 
     func cancelQueuedWindowCreation(windowId: UInt32) {
@@ -127,8 +143,9 @@ extension AXEventHandler {
 
     private func performLifecycleQuery(_ request: LifecycleQuery) async {
         defer { finishLifecycleQuery(request) }
-        guard isCurrentLifecycleCreate(request) else { return }
+        guard let controller, isCurrentLifecycleCreate(request) else { return }
         let identity = request.destructionIdentity ?? lifecycleIdentity(windowId: request.windowId)
+        let observedAtSeq = controller.workspaceManager.worldSeq
         let info: WindowServerInfo?
         do {
             info = try await lifecycleQueries.query(request.windowId)
@@ -142,11 +159,11 @@ extension AXEventHandler {
         guard isCurrentLifecycleCreate(request) else { return }
         let appliedIdentity = lifecycleQueries.active?.destructionIdentity ?? identity
         lifecycleQueries.active = nil
-        applyLifecycleObservation(request, identity: appliedIdentity, windowInfo: info)
+        applyLifecycleObservation(request, identity: appliedIdentity, observedAtSeq: observedAtSeq, windowInfo: info)
     }
 
     private func applyLifecycleObservation(
-        _ request: LifecycleQuery, identity: LifecycleIdentity, windowInfo: WindowServerInfo?
+        _ request: LifecycleQuery, identity: LifecycleIdentity, observedAtSeq: UInt64, windowInfo: WindowServerInfo?
     ) {
         guard let controller, !controller.isOwnedWindow(windowNumber: Int(request.windowId)) else { return }
         let current = controller.workspaceManager.entry(forWindowId: Int(request.windowId))
@@ -182,7 +199,43 @@ extension AXEventHandler {
                 )
             }
         case .orderChanged:
+            guard let current,
+                  controller.workspaceManager.isSeqCurrent(
+                      observedAtSeq, for: current.workspaceId, domains: .layoutCommit
+                  )
+            else {
+                controller.surfaceReconciler.noteRestackOccurred()
+                return
+            }
             applyWindowOrderChanged(windowId: request.windowId, windowInfo: windowInfo)
+        case let .activation(facts):
+            applyLifecycleActivation(facts, current: current, observedAtSeq: observedAtSeq, windowInfo: windowInfo)
+        }
+    }
+
+    private func applyLifecycleActivation(
+        _ facts: ActivationFacts,
+        current: WindowState?,
+        observedAtSeq: UInt64,
+        windowInfo: WindowServerInfo?
+    ) {
+        guard let controller else { return }
+        guard isCurrentActivationFacts(facts, controller: controller),
+              let current,
+              controller.workspaceManager.isSeqCurrent(
+                  observedAtSeq, for: current.workspaceId, domains: .layoutCommit
+              ),
+              let focusedWindow = facts.focusedWindow,
+              CFEqual(current.axRef.element, focusedWindow.axRef.element)
+              || isKnownAXIdentityAlias(windowId: current.windowId, axRef: focusedWindow.axRef)
+        else { return }
+        applyObservedWindowOrdering(
+            windowInfo, token: current.token, appFullscreen: focusedWindow.isFullscreen
+        )
+        if windowInfo?.isOrderedIn == true,
+           controller.workspaceManager.entry(for: current.token)?.observedState.isNativeWithdrawn == false
+        {
+            handleActivationFactsResolved(facts)
         }
     }
 

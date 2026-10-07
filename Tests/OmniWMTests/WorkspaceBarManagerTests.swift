@@ -3,6 +3,7 @@
 
 import AppKit
 @testable import OmniWM
+import SwiftUI
 import XCTest
 
 @MainActor
@@ -33,43 +34,88 @@ final class WorkspaceBarManagerTests: XCTestCase {
         try await super.tearDown()
     }
 
-    func testPrimaryBarFramesChangedCallbackFiresWhenFrameChanges() {
+    func testPrimaryBarFrameChangesWithContent() {
         let manager = makeManager()
         defer { manager.cleanup() }
-        var calls = 0
-        manager.onPrimaryBarFramesChanged = { calls += 1 }
 
         manager.apply([barSurface(itemCount: 1)])
-        XCTAssertEqual(calls, 1)
+        let originalFrame = manager.barsByMonitor[monitor.id]?.primary.lastAppliedFrame
+        XCTAssertNotNil(originalFrame)
 
         manager.apply([barSurface(itemCount: 4)])
-        XCTAssertEqual(calls, 2)
+        XCTAssertNotEqual(manager.barsByMonitor[monitor.id]?.primary.lastAppliedFrame, originalFrame)
     }
 
-    func testPrimaryBarFramesChangedCallbackDoesNotFireForIdenticalScene() {
+    func testIdenticalSceneKeepsPrimaryBarFrame() {
         let manager = makeManager()
         defer { manager.cleanup() }
-        var calls = 0
-        manager.onPrimaryBarFramesChanged = { calls += 1 }
 
         let scene = [barSurface(itemCount: 2)]
         manager.apply(scene)
-        XCTAssertEqual(calls, 1)
+        let originalFrame = manager.barsByMonitor[monitor.id]?.primary.lastAppliedFrame
+        XCTAssertNotNil(originalFrame)
 
         manager.apply(scene)
-        XCTAssertEqual(calls, 1)
+        XCTAssertEqual(manager.barsByMonitor[monitor.id]?.primary.lastAppliedFrame, originalFrame)
     }
 
-    func testPrimaryBarFramesChangedCallbackFiresWhenBarRemoved() {
+    func testEmptySceneRemovesPrimaryBar() {
         let manager = makeManager()
-        var calls = 0
-        manager.onPrimaryBarFramesChanged = { calls += 1 }
 
         manager.apply([barSurface(itemCount: 1)])
-        XCTAssertEqual(calls, 1)
+        XCTAssertNotNil(manager.barsByMonitor[monitor.id])
 
         manager.apply([])
-        XCTAssertEqual(calls, 2)
+        XCTAssertNil(manager.barsByMonitor[monitor.id])
+    }
+
+    func testHiddenBarPlacementUsesActualPrimaryIslandAndAppearance() throws {
+        let manager = makeManager()
+        defer { manager.cleanup() }
+        manager.apply([barSurface(itemCount: 2)])
+        let instance = try XCTUnwrap(manager.barsByMonitor[monitor.id])
+        let frame = CGRect(x: 1200, y: 1000, width: 300, height: 24)
+        instance.primary.panel.setFrame(frame, display: false)
+
+        let placement = try XCTUnwrap(manager.hiddenBarPanelPlacement(on: monitor.id))
+
+        XCTAssertEqual(placement.workspaceBar?.frame, frame)
+        XCTAssertEqual(placement.workspaceBar?.backgroundStyle, instance.model.snapshot.backgroundStyle)
+        XCTAssertEqual(placement.workspaceBar?.backgroundOpacity, instance.model.snapshot.backgroundOpacity)
+        XCTAssertEqual(placement.visibleFrame, monitor.visibleFrame)
+        manager.apply([])
+        XCTAssertNil(manager.hiddenBarPanelPlacement(on: monitor.id))
+    }
+
+    func testHiddenBarJoinSquaresOnlyTheJoinedBar() throws {
+        let manager = makeManager()
+        defer { manager.cleanup() }
+        manager.apply([barSurface(itemCount: 2)])
+        let model = try XCTUnwrap(manager.barsByMonitor[monitor.id]?.model)
+
+        controller.hiddenBarController.onWorkspaceBarJoin?(.init(monitorId: monitor.id, edge: .below))
+        XCTAssertEqual(model.hiddenBarJoinEdge, .below)
+        manager.setHiddenBarJoin(.init(monitorId: .init(displayId: 4_242), edge: .above))
+        XCTAssertNil(model.hiddenBarJoinEdge)
+        manager.setHiddenBarJoin(.init(monitorId: monitor.id, edge: .left))
+        manager.apply([])
+        manager.apply([barSurface(itemCount: 2)])
+        XCTAssertEqual(manager.barsByMonitor[monitor.id]?.model.hiddenBarJoinEdge, .left)
+        manager.setHiddenBarJoin(nil)
+        XCTAssertNil(manager.barsByMonitor[monitor.id]?.model.hiddenBarJoinEdge)
+    }
+
+    func testJoinedBarSquaresOnlyItsFacingCorners() {
+        let cases: [(PopupAttachment.Edge?, RectangleCornerRadii)] = [
+            (nil, .init(topLeading: 8, bottomLeading: 8, bottomTrailing: 8, topTrailing: 8)),
+            (.below, .init(topLeading: 8, bottomLeading: 0, bottomTrailing: 0, topTrailing: 8)),
+            (.above, .init(topLeading: 0, bottomLeading: 8, bottomTrailing: 8, topTrailing: 0)),
+            (.right, .init(topLeading: 8, bottomLeading: 8, bottomTrailing: 0, topTrailing: 0)),
+            (.left, .init(topLeading: 0, bottomLeading: 0, bottomTrailing: 8, topTrailing: 8))
+        ]
+        for (edge, radii) in cases {
+            XCTAssertEqual(WorkspaceBarView.barShape(joinedAt: edge).cornerRadii, radii, "\(String(describing: edge))")
+        }
     }
 
     private func makeManager() -> WorkspaceBarManager {

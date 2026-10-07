@@ -148,6 +148,8 @@ enum RuntimeDiagnosticsReport {
             + " workspaceVisible=\(window.workspaceVisible)"
             + " mode=\(window.mode)"
             + " hidden=\(hidden)"
+            + " minimized=\(window.isMinimized)"
+            + " nativeWithdrawn=\(window.isNativeWithdrawn)"
             + " layout=\(window.layoutReason)"
             + " nativeFullscreen=\(nativeFullscreen)"
             + " token=\(window.token.pid):\(window.token.windowId)"

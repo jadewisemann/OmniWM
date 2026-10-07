@@ -9,6 +9,8 @@ struct AppVisibilityWindowDiagnostics {
     let workspaceVisible: Bool
     let mode: TrackedWindowMode
     let hiddenReason: HiddenReason?
+    let isMinimized: Bool
+    let isNativeWithdrawn: Bool
     let layoutReason: LayoutReason
     let nativeFullscreenTransition: WorkspaceNativeFullscreenTransition?
 }
@@ -57,6 +59,8 @@ extension WorkspaceManager {
                     workspaceVisible: visibleWorkspaceIds.contains(entry.workspaceId),
                     mode: entry.mode,
                     hiddenReason: entry.hiddenState?.reason,
+                    isMinimized: entry.observedState.isMinimized,
+                    isNativeWithdrawn: entry.observedState.isNativeWithdrawn,
                     layoutReason: entry.layoutReason,
                     nativeFullscreenTransition: nativeFullscreenRecord(for: entry.token)?.transition
                 )
@@ -77,7 +81,7 @@ extension WorkspaceManager {
         workspaces.compactMap { workspace in
             let expected = Set(
                 tiledEntries(in: workspace.id).lazy
-                    .filter { self.isAppHidden(pid: $0.pid) }
+                    .filter { self.isWindowSuppressedByMacOS($0) }
                     .map(\.token)
             )
             let niri = projectionDiagnostics(

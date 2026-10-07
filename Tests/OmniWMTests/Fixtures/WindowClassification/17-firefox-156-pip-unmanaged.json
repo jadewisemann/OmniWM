@@ -1,0 +1,69 @@
+{
+  "observation": {
+    "appName": "Firefox",
+    "bundleId": "org.mozilla.firefox",
+    "input": {
+      "appFullscreen": false,
+      "appName": "Firefox",
+      "ax": {
+        "appPolicy": "regular",
+        "attributeFetchSucceeded": true,
+        "bundleId": "org.mozilla.firefox",
+        "fullscreenButtonEnabled": true,
+        "hasCloseButton": true,
+        "hasFullscreenButton": true,
+        "hasMinimizeButton": true,
+        "hasZoomButton": true,
+        "isMain": true,
+        "isModal": false,
+        "role": "AXWindow",
+        "subrole": "AXStandardWindow",
+        "title": "Picture-in-Picture"
+      },
+      "sizeConstraints": {
+        "isFixed": false,
+        "maxHeight": 0,
+        "maxWidth": 0,
+        "minHeight": 100,
+        "minWidth": 100
+      },
+      "windowServer": {
+        "attributes": 3,
+        "frameHeight": 519,
+        "frameWidth": 923,
+        "frameX": 275,
+        "frameY": 364,
+        "id": 53555,
+        "level": 3,
+        "parentId": 0,
+        "pid": 11636,
+        "tags": 216172786413742082
+      }
+    },
+    "observedDecision": {
+      "disposition": "floating",
+      "heuristicReasons": [],
+      "layoutDecisionKind": "explicitLayout",
+      "minHeight": 120,
+      "minWidth": 500,
+      "source": "builtInRule(browserPictureInPicture)"
+    },
+    "rulesRevision": 0,
+    "tokenPid": 11636,
+    "tokenWindowId": 53555
+  },
+  "rules": [
+    {
+      "id": "77400000-0000-0000-0000-000000000001",
+      "bundleId": "org.mozilla.firefox",
+      "minWidth": 500,
+      "minHeight": 120
+    }
+  ],
+  "expectedDecision": {
+    "disposition": "unmanaged",
+    "source": "builtInRule(externalSurface)",
+    "heuristicReasons": [],
+    "layoutDecisionKind": "explicitLayout"
+  }
+}

@@ -9,6 +9,26 @@ import XCTest
 
 @MainActor
 final class SettingsExportApplicationTests: XCTestCase {
+    func testAnimationSpeedPersistsAndImports() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let settings = SettingsStore(
+            persistence: SettingsFilePersistence(directory: directory, startWatching: false, deferSaves: false),
+            runtimeState: RuntimeStateStore(directory: directory, deferSaves: false)
+        )
+        XCTAssertEqual(settings.animationSpeed, 1)
+        settings.animationSpeed = 2
+        let saved = try SettingsTOMLCodec.decode(Data(contentsOf: settings.settingsFileURL))
+        XCTAssertEqual(saved.animationSpeed, 2)
+        for speed in [0.25, 1, 4, Double.infinity] {
+            var values = saved
+            values.animationSpeed = speed
+            settings.applyExport(values)
+            XCTAssertEqual(settings.animationSpeed, speed.isFinite ? speed : 1)
+            XCTAssertEqual(settings.toExport().animationSpeed, settings.animationSpeed)
+        }
+    }
+
     func testTabRailAppIconsPersistsAndImportsBothStyles() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }

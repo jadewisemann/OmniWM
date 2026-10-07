@@ -17,6 +17,9 @@ enum WindowStructuralEligibility {
 struct WindowEligibilityPolicy {
     private static let nativeFullscreenSubrole = "AXFullScreenWindow"
     private static let systemSurfaceLevelFloor = CGWindowLevelForKey(.statusWindow)
+    private static let mozillaPictureInPictureTitleRegex = compilePictureInPictureTitle("^Picture-in-Picture$")
+    private static let chromiumPictureInPictureTitleRegex = compilePictureInPictureTitle("^Picture-in-picture$")
+    private static let edgePictureInPictureTitleRegex = compilePictureInPictureTitle("^Picture in Picture$")
 
     let hiddenTitleBarFullscreenButtonOptionalBundleIds: Set<String>
     let hiddenTitleBarNonStandardSubroleBundleIds: Set<String>
@@ -29,7 +32,42 @@ struct WindowEligibilityPolicy {
         if let bundleId = facts.ax.bundleId?.lowercased(), inputMethodBundleIds.contains(bundleId) {
             return true
         }
+        if facts.ax.attributeFetchSucceeded,
+           facts.ax.role == (kAXWindowRole as String),
+           let titleRegex = Self.pictureInPictureTitleRegex(for: facts.ax.bundleId),
+           let title = facts.ax.title,
+           titleRegex.firstMatch(
+               in: title,
+               range: NSRange(title.startIndex..., in: title)
+           ) != nil
+        {
+            return true
+        }
         return false
+    }
+
+    func requiresPictureInPictureTitle(for bundleId: String?) -> Bool {
+        Self.pictureInPictureTitleRegex(for: bundleId) != nil
+    }
+
+    private static func pictureInPictureTitleRegex(for bundleId: String?) -> NSRegularExpression? {
+        switch bundleId?.lowercased() {
+        case "org.mozilla.firefox",
+             "app.zen-browser.zen",
+             "net.librewolf.librewolf": mozillaPictureInPictureTitleRegex
+        case "com.google.chrome",
+             "com.brave.browser": chromiumPictureInPictureTitleRegex
+        case "com.microsoft.edgemac": edgePictureInPictureTitleRegex
+        default: nil
+        }
+    }
+
+    private static func compilePictureInPictureTitle(_ pattern: String) -> NSRegularExpression {
+        do {
+            return try NSRegularExpression(pattern: pattern)
+        } catch {
+            preconditionFailure("Invalid built-in Picture-in-Picture pattern: \(error)")
+        }
     }
 
     func acceptsHiddenTitleBar(_ facts: WindowRuleFacts) -> Bool {

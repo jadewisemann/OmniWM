@@ -21,6 +21,11 @@ struct ObservedWindowState: Equatable {
     var isVisible: Bool
     var isNativeFullscreen: Bool
     var isMinimized = false
+    var isNativeWithdrawn = false
+
+    var isNativeSuppressed: Bool {
+        isMinimized || isNativeWithdrawn
+    }
 
     static func initial(
         workspaceId: WorkspaceDescriptor.ID,

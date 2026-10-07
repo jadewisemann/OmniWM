@@ -9,6 +9,15 @@ import XCTest
 
 @MainActor
 final class WindowRuleEngineTests: XCTestCase {
+    private let pictureInPictureBrowsers: [(bundleId: String, title: String)] = [
+        ("org.mozilla.firefox", "Picture-in-Picture"),
+        ("app.zen-browser.zen", "Picture-in-Picture"),
+        ("net.librewolf.librewolf", "Picture-in-Picture"),
+        ("com.google.Chrome", "Picture-in-picture"),
+        ("com.brave.Browser", "Picture-in-picture"),
+        ("com.microsoft.edgemac", "Picture in Picture")
+    ]
+
     private func facts(
         appName: String?,
         bundleId: String?,
@@ -613,13 +622,13 @@ final class WindowRuleEngineTests: XCTestCase {
             .builtInRule(WindowRuleEngine.externalSurfaceRuleName)
         )
 
-        for bundleId in ["org.mozilla.firefox", "app.zen-browser.zen"] {
+        for browser in pictureInPictureBrowsers {
             let pictureInPictureDecision = evaluate(
                 engine,
                 transientFacts(
-                    bundleId: bundleId,
+                    bundleId: browser.bundleId,
                     windowServer: windowServer,
-                    title: "Picture-in-Picture"
+                    title: browser.title
                 ),
                 token: token
             )
@@ -631,42 +640,45 @@ final class WindowRuleEngineTests: XCTestCase {
         }
     }
 
-    func testAutomaticUserEffectsSurviveBuiltInLayoutAndMissingTitle() {
+    func testPictureInPictureDropsUserEffectsWhileMissingTitleDefers() {
         let engine = WindowRuleEngine()
-        let rule = AppRule(
-            bundleId: "org.mozilla.firefox",
-            assignToWorkspace: "2",
-            initialContainerPrimarySpan: 0.42,
-            minWidth: 420,
-            minHeight: 240
-        )
-        engine.rebuild(rules: [rule])
-        let pictureInPicture = evaluate(
-            engine,
-            facts(appName: "Firefox", bundleId: rule.bundleId, title: "Picture-in-Picture"),
-            appFullscreen: true
-        )
-        let missingTitle = evaluate(
-            engine,
-            facts(appName: "Firefox", bundleId: rule.bundleId),
-            appFullscreen: true
-        )
+        for browser in pictureInPictureBrowsers {
+            let rule = AppRule(
+                bundleId: browser.bundleId,
+                assignToWorkspace: "2",
+                initialContainerPrimarySpan: 0.42,
+                minWidth: 420,
+                minHeight: 240
+            )
+            engine.rebuild(rules: [rule])
+            let pictureInPicture = evaluate(
+                engine,
+                facts(appName: "Browser", bundleId: rule.bundleId, title: browser.title),
+                appFullscreen: true
+            )
+            let missingTitle = evaluate(
+                engine,
+                facts(appName: "Browser", bundleId: rule.bundleId),
+                appFullscreen: true
+            )
 
-        XCTAssertEqual(pictureInPicture.disposition, .floating)
-        XCTAssertEqual(pictureInPicture.source, .builtInRule("browserPictureInPicture"))
-        XCTAssertEqual(pictureInPicture.layoutDecisionKind, .explicitLayout)
-        XCTAssertNil(pictureInPicture.deferredReason)
-        XCTAssertEqual(missingTitle.disposition, .undecided)
-        XCTAssertEqual(missingTitle.source, .userRule(rule.id))
-        XCTAssertEqual(missingTitle.deferredReason, .requiredTitleMissing)
-        for decision in [pictureInPicture, missingTitle] {
-            XCTAssertEqual(decision.workspaceName, "2")
-            XCTAssertEqual(decision.ruleEffects, ManagedWindowRuleEffects(
+            XCTAssertEqual(pictureInPicture.disposition, .unmanaged)
+            XCTAssertEqual(pictureInPicture.source, .builtInRule(WindowRuleEngine.externalSurfaceRuleName))
+            XCTAssertEqual(pictureInPicture.layoutDecisionKind, .explicitLayout)
+            XCTAssertNil(pictureInPicture.deferredReason)
+            XCTAssertNil(pictureInPicture.workspaceName)
+            XCTAssertEqual(pictureInPicture.ruleEffects, .none)
+            XCTAssertEqual(pictureInPicture.admissionHints, .none)
+            XCTAssertEqual(missingTitle.disposition, .undecided)
+            XCTAssertEqual(missingTitle.source, .userRule(rule.id))
+            XCTAssertEqual(missingTitle.deferredReason, .requiredTitleMissing)
+            XCTAssertEqual(missingTitle.workspaceName, "2")
+            XCTAssertEqual(missingTitle.ruleEffects, ManagedWindowRuleEffects(
                 minWidth: 420,
                 minHeight: 240,
                 matchedRuleId: rule.id
             ))
-            XCTAssertEqual(decision.admissionHints.initialNiriContainerPrimarySpan, 0.42)
+            XCTAssertEqual(missingTitle.admissionHints.initialNiriContainerPrimarySpan, 0.42)
         }
     }
 
@@ -710,7 +722,7 @@ final class WindowRuleEngineTests: XCTestCase {
         }
     }
 
-    func testSupportedRootUtilitiesRemainExplicitFloatingWindows() {
+    func testFinderQuickLookRemainsExplicitFloatingWindow() {
         let engine = WindowRuleEngine()
         let quickLookToken = WindowToken(pid: 84_064, windowId: 84_065)
         let quickLookDecision = evaluate(
@@ -727,40 +739,139 @@ final class WindowRuleEngineTests: XCTestCase {
 
         XCTAssertEqual(quickLookDecision.disposition, .floating)
         XCTAssertEqual(quickLookDecision.source, .builtInRule("finderQuickLook"))
-
-        let pictureInPictureToken = WindowToken(pid: 84_066, windowId: 84_067)
-        let pictureInPictureDecision = evaluate(
-            engine,
-            facts(
-                appName: "Firefox",
-                bundleId: "org.mozilla.firefox",
-                title: "Picture-in-Picture",
-                windowServer: transientWindowServerInfo(token: pictureInPictureToken, parentId: 0)
-            ),
-            token: pictureInPictureToken
-        )
-
-        XCTAssertEqual(pictureInPictureDecision.disposition, .floating)
-        XCTAssertEqual(pictureInPictureDecision.source, .builtInRule("browserPictureInPicture"))
     }
 
-    func testPictureInPictureRulesPreserveFoundationAnchorMatching() {
+    func testPictureInPictureExclusionPreservesFoundationAnchorMatching() {
         let engine = WindowRuleEngine()
         let token = WindowToken(pid: 84_068, windowId: 84_069)
-        for bundleId in ["org.mozilla.firefox", "app.zen-browser.zen"] {
+        for browser in pictureInPictureBrowsers {
             for suffix in ["", "\n", "\r", "\r\n"] {
                 let decision = evaluate(
                     engine,
                     facts(
                         appName: "Browser",
-                        bundleId: bundleId,
-                        title: "Picture-in-Picture" + suffix,
+                        bundleId: browser.bundleId,
+                        title: browser.title + suffix,
                         windowServer: transientWindowServerInfo(token: token, parentId: 0)
                     ),
                     token: token
                 )
-                XCTAssertEqual(decision.disposition, .floating)
-                XCTAssertEqual(decision.source, .builtInRule("browserPictureInPicture"))
+                XCTAssertEqual(decision.disposition, .unmanaged)
+                XCTAssertEqual(decision.source, .builtInRule(WindowRuleEngine.externalSurfaceRuleName))
+                XCTAssertFalse(decision.tracksWindow)
+            }
+        }
+    }
+
+    func testPictureInPictureExclusionPrecedesUserRulesAndManualOverrides() {
+        let engine = WindowRuleEngine()
+        for browser in pictureInPictureBrowsers {
+            engine.rebuild(rules: [AppRule(
+                bundleId: browser.bundleId,
+                axRole: kAXWindowRole as String,
+                axSubrole: kAXStandardWindowSubrole as String,
+                layout: .tile,
+                assignToWorkspace: "2",
+                minWidth: 500
+            )])
+            let decision = evaluate(
+                engine,
+                facts(appName: "Browser", bundleId: browser.bundleId, title: browser.title),
+                appFullscreen: true
+            )
+
+            XCTAssertEqual(decision.disposition, .unmanaged)
+            XCTAssertEqual(decision.admissionOutcome, .ignored)
+            XCTAssertNil(decision.workspaceName)
+            XCTAssertEqual(decision.ruleEffects, .none)
+            XCTAssertEqual(decision.admissionHints, .none)
+            for manualOverride in [ManualWindowOverride.forceTile, .forceFloat] {
+                XCTAssertEqual(
+                    WindowRuleEngine.applyingManualOverride(decision, manualOverride: manualOverride),
+                    decision
+                )
+            }
+        }
+    }
+
+    func testBrowserTitleReadinessPrecedesExplicitLayoutRules() {
+        let engine = WindowRuleEngine()
+        for browser in pictureInPictureBrowsers {
+            XCTAssertTrue(engine.requiresTitle(for: browser.bundleId))
+            XCTAssertTrue(engine.requiresTitle(for: browser.bundleId.uppercased()))
+            for layout in [WindowRuleLayoutAction.tile, .float] {
+                engine.rebuild(rules: [AppRule(bundleId: browser.bundleId, layout: layout)])
+                XCTAssertTrue(engine.requiresTitle(for: browser.bundleId))
+                XCTAssertTrue(engine.needsWindowReevaluation)
+                let missingTitle = evaluate(engine, facts(appName: "Browser", bundleId: browser.bundleId))
+                XCTAssertEqual(missingTitle.disposition, .undecided)
+                XCTAssertEqual(missingTitle.deferredReason, .requiredTitleMissing)
+                let pictureInPicture = evaluate(
+                    engine,
+                    facts(appName: "Browser", bundleId: browser.bundleId, title: browser.title)
+                )
+                XCTAssertEqual(pictureInPicture.disposition, .unmanaged)
+                let ordinaryWindow = evaluate(
+                    engine,
+                    facts(appName: "Browser", bundleId: browser.bundleId, title: "Browser")
+                )
+                XCTAssertEqual(ordinaryWindow.disposition, layout == .tile ? .managed : .floating)
+            }
+        }
+    }
+
+    func testPictureInPictureExclusionDoesNotDependOnNativeSubrole() {
+        let engine = WindowRuleEngine()
+        let subroles: [String?] = [
+            kAXStandardWindowSubrole as String,
+            kAXDialogSubrole as String,
+            kAXFloatingWindowSubrole as String,
+            nil
+        ]
+        for browser in pictureInPictureBrowsers {
+            for subrole in subroles {
+                let decision = evaluate(
+                    engine,
+                    facts(
+                        appName: "Browser",
+                        bundleId: browser.bundleId.uppercased(),
+                        title: browser.title,
+                        subrole: subrole
+                    )
+                )
+                XCTAssertEqual(decision.disposition, .unmanaged)
+            }
+        }
+    }
+
+    func testPictureInPictureExclusionLeavesOtherWindowsManaged() {
+        let engine = WindowRuleEngine()
+        for browser in pictureInPictureBrowsers {
+            for title in ["", "Browser", browser.title + " - Browser"] {
+                XCTAssertEqual(
+                    evaluate(engine, facts(appName: "Browser", bundleId: browser.bundleId, title: title)).disposition,
+                    .managed
+                )
+            }
+        }
+    }
+
+    func testPictureInPictureExclusionDoesNotMatchOtherBrowsersOrBrowserFamilyTitles() {
+        let engine = WindowRuleEngine()
+        XCTAssertFalse(engine.requiresTitle(for: "org.example.browser"))
+        for title in ["Picture-in-Picture", "Picture-in-picture", "Picture in Picture"] {
+            XCTAssertEqual(
+                evaluate(
+                    engine,
+                    facts(appName: "Other", bundleId: "org.example.browser", title: title)
+                ).disposition,
+                .managed
+            )
+            for browser in pictureInPictureBrowsers where browser.title != title {
+                XCTAssertEqual(
+                    evaluate(engine, facts(appName: "Browser", bundleId: browser.bundleId, title: title)).disposition,
+                    .managed
+                )
             }
         }
     }

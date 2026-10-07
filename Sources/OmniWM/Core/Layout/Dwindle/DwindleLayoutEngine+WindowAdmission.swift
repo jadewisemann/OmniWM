@@ -122,7 +122,8 @@ extension DwindleLayoutEngine {
               let targetRect,
               let activeFrame = activeWindowFrame
         else {
-            return (aspectOrientation(for: targetRect), false)
+            let orientation = aspectOrientation(for: targetRect)
+            return (orientation, orientation == .vertical)
         }
 
         let targetCenter = targetRect.center
@@ -148,7 +149,7 @@ extension DwindleLayoutEngine {
         if abs(slope) < aspect {
             return (.horizontal, deltaX < 0)
         } else {
-            return (.vertical, deltaY < 0)
+            return (.vertical, deltaY <= 0)
         }
     }
 

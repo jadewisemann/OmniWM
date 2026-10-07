@@ -11,7 +11,7 @@ enum AppAXContextRegistry {
     static let workerLifetime = AppAXWorkerLifetime()
     private(set) static var contexts: [pid_t: AppAXContext] = [:]
     private static var macOSHiddenPIDs: Set<pid_t> = []
-    private(set) static var minimizedWindowTokens: Set<WindowToken> = []
+    private(set) static var nativeSuppressedWindowTokens: Set<WindowToken> = []
     private static var inFlightCreations: [pid_t: (
         generation: UInt64,
         task: Task<AppAXContext?, Error>
@@ -49,8 +49,8 @@ enum AppAXContextRegistry {
             }
             if let context {
                 context.setMacOSAppHidden(macOSHiddenPIDs.contains(pid), for: [])
-                for token in minimizedWindowTokens where token.pid == pid {
-                    context.setWindowMinimized(true, for: token.windowId)
+                for token in nativeSuppressedWindowTokens where token.pid == pid {
+                    context.setWindowNativeSuppressed(true, for: token.windowId)
                 }
                 contexts[pid] = context
             }
@@ -70,7 +70,7 @@ enum AppAXContextRegistry {
         inFlightCreations.removeAll()
         for context in Array(contexts.values) { context.destroy() }
         macOSHiddenPIDs.removeAll()
-        minimizedWindowTokens.removeAll()
+        nativeSuppressedWindowTokens.removeAll()
         if let completion { workerLifetime.whenFinished(completion) }
     }
 
@@ -90,32 +90,32 @@ enum AppAXContextRegistry {
     }
 
     @discardableResult
-    static func setWindowMinimized(_ minimized: Bool, token: WindowToken) -> Bool {
-        let changed = minimized
-            ? minimizedWindowTokens.insert(token).inserted
-            : minimizedWindowTokens.remove(token) != nil
+    static func setWindowNativeSuppressed(_ suppressed: Bool, token: WindowToken) -> Bool {
+        let changed = suppressed
+            ? nativeSuppressedWindowTokens.insert(token).inserted
+            : nativeSuppressedWindowTokens.remove(token) != nil
         guard changed else { return false }
-        contexts[token.pid]?.setWindowMinimized(minimized, for: token.windowId)
+        contexts[token.pid]?.setWindowNativeSuppressed(suppressed, for: token.windowId)
         return true
     }
 
-    static func rekeyMinimizedWindow(from oldToken: WindowToken, to newToken: WindowToken) {
-        let wasMinimized = minimizedWindowTokens.remove(oldToken) != nil
-        if wasMinimized {
-            minimizedWindowTokens.insert(newToken)
+    static func rekeyNativeSuppressedWindow(from oldToken: WindowToken, to newToken: WindowToken) {
+        let wasSuppressed = nativeSuppressedWindowTokens.remove(oldToken) != nil
+        if wasSuppressed {
+            nativeSuppressedWindowTokens.insert(newToken)
         }
         if oldToken != newToken {
-            contexts[oldToken.pid]?.setWindowMinimized(false, for: oldToken.windowId)
+            contexts[oldToken.pid]?.setWindowNativeSuppressed(false, for: oldToken.windowId)
         }
-        contexts[newToken.pid]?.setWindowMinimized(
-            minimizedWindowTokens.contains(newToken),
+        contexts[newToken.pid]?.setWindowNativeSuppressed(
+            nativeSuppressedWindowTokens.contains(newToken),
             for: newToken.windowId
         )
     }
 
-    static func clearMinimizedWindows(for pid: pid_t) {
-        for token in minimizedWindowTokens.filter({ $0.pid == pid }) {
-            setWindowMinimized(false, token: token)
+    static func clearNativeSuppressedWindows(for pid: pid_t) {
+        for token in nativeSuppressedWindowTokens.filter({ $0.pid == pid }) {
+            setWindowNativeSuppressed(false, token: token)
         }
     }
 

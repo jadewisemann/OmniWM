@@ -7,17 +7,20 @@ import CoreGraphics
 import Foundation
 
 extension AXManager {
-    func isWindowMinimized(_ token: WindowToken) -> Bool {
-        AppAXContextRegistry.minimizedWindowTokens.contains(token)
+    func isWindowNativeSuppressed(_ token: WindowToken) -> Bool {
+        AppAXContextRegistry.nativeSuppressedWindowTokens.contains(token)
     }
 
-    func setWindowMinimized(_ minimized: Bool, token: WindowToken) {
-        guard AppAXContextRegistry.setWindowMinimized(minimized, token: token) else { return }
+    func setWindowNativeSuppressed(_ suppressed: Bool, token: WindowToken) {
+        guard AppAXContextRegistry.setWindowNativeSuppressed(suppressed, token: token) else { return }
         clearSkyLightLivePosition(for: token.windowId)
-        if minimized {
+        if suppressed {
             let deliveries = frameLedger.suppressFrameWrite(windowId: token.windowId)
             cancelPendingFrameRetry(for: token.windowId)
-            parkLedger.cancelParkFrameJobs([(pid: token.pid, windowId: token.windowId)], reason: "minimized")
+            parkLedger.cancelParkFrameJobs(
+                [(pid: token.pid, windowId: token.windowId)],
+                reason: "native-window-suppressed"
+            )
             for delivery in deliveries {
                 delivery.deliver()
             }
@@ -169,7 +172,7 @@ extension AXManager {
         positions.filter {
             (allowInactive || !inactiveWorkspaceWindowIds.contains($0.token.windowId))
                 && !macOSHiddenAppPIDs.contains($0.token.pid)
-                && !isWindowMinimized($0.token)
+                && !isWindowNativeSuppressed($0.token)
                 && !excludeFrameWriteForNativeTitleBarDrag(pid: $0.token.pid, windowId: $0.token.windowId)
         }
     }

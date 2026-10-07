@@ -382,6 +382,7 @@ extension ViewportState {
         } else {
             sourcePosition - target.position + sourceSpan
         }
-        return !(pairSpan + context.gaps * 2 <= areas.span(of: areas.working))
+        return (pairSpan + context.gaps * 2).roundedToPhysicalPixel(scale: areas.scale)
+            > areas.span(of: areas.working).roundedToPhysicalPixel(scale: areas.scale)
     }
 }

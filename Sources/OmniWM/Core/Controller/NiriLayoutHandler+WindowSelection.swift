@@ -186,7 +186,8 @@ extension NiriLayoutHandler {
             in: pass.wsId,
             workingFrame: pass.insetFrame,
             gaps: pass.gap,
-            orientation: pass.orientation
+            orientation: pass.orientation,
+            motion: pass.motion
         )
     }
 
@@ -310,7 +311,7 @@ extension NiriLayoutHandler {
                 window.animateMoveFrom(
                     displacement: CGPoint(x: 0, y: -16),
                     clock: pass.engine.animationClock,
-                    config: pass.engine.windowMovementAnimationConfig,
+                    config: pass.motion.scaled(pass.engine.windowMovementAnimationConfig),
                     displayRefreshRate: state.displayRefreshRate,
                     animated: pass.motion.animationsEnabled
                 )

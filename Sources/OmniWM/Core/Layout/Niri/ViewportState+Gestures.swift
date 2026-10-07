@@ -108,7 +108,7 @@ extension ViewportState {
         }
 
         rebaseOffset(by: offsetDelta)
-        springOffset(to: CGFloat(targetOffset))
+        springOffset(to: CGFloat(targetOffset), config: motion.scaled(.niriHorizontalViewMovement))
 
         activatePrevColumnOnRemoval = nil
     }
@@ -341,7 +341,7 @@ extension ViewportState {
 
         rebaseOffset(by: offsetDelta)
         if overscrolled {
-            springOffset(to: CGFloat(preserved.finalOffset))
+            springOffset(to: CGFloat(preserved.finalOffset), config: motion.scaled(.niriHorizontalViewMovement))
         } else {
             decelerateOffset(to: CGFloat(preserved.finalOffset))
         }

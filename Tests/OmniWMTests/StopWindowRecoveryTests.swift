@@ -59,6 +59,23 @@ final class StopWindowRecoveryTests: XCTestCase {
         )
     }
 
+    func testNativeWithdrawalExcludesParkedAndOffscreenWindowsWithoutExcludingMinimizedRecovery() throws {
+        let fixture = try Fixture()
+        defer { fixture.controller.serviceLifecycleManager.stop() }
+        let parked = fixture.track(0)
+        let offscreen = fixture.track(1)
+        let minimized = fixture.track(2)
+        for token in [parked, minimized] { fixture.hide(token, reason: .workspaceInactive) }
+        for token in [parked, offscreen] { fixture.manager.setWindowNativeWithdrawn(true, token: token) }
+        fixture.manager.setWindowMinimized(true, token: minimized)
+        fixture.controller.layoutRefreshController.fastFrameProvider = { token, _ in
+            token == offscreen ? CGRect(x: 3000, y: -200, width: 300, height: 200)
+                : CGRect(x: 100, y: 100, width: 300, height: 200)
+        }
+
+        XCTAssertEqual(fixture.controller.serviceLifecycleManager.stopWindowTargets().map(\.token), [minimized])
+    }
+
     func testLatestFloatingOriginWinsOverOldHiddenProportion() throws {
         let fixture = try Fixture()
         defer { fixture.controller.serviceLifecycleManager.stop() }

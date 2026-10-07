@@ -146,8 +146,9 @@ enum StateReducer {
              .managedReplacementMetadataChanged:
             reducePlacementNotes(event, context: context, plan: &plan)
             return true
-        case .windowMinimizedChanged:
-            reduceWindowMinimization(event, context: context, plan: &plan)
+        case .windowMinimizedChanged,
+             .windowNativeWithdrawalChanged:
+            reduceNativeWindowSuppression(event, context: context, plan: &plan)
             return true
         case .hiddenApplicationsChanged,
              .appVisibilityInvalidated:

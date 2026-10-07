@@ -61,7 +61,12 @@ final class WorkspaceSwipeMotion {
     }
 
     @discardableResult
-    func release(timestamp: TimeInterval, allowFlick: Bool, animationTime: TimeInterval) -> Bool {
+    func release(
+        timestamp: TimeInterval,
+        allowFlick: Bool,
+        animationTime: TimeInterval,
+        motion: MotionSnapshot = .enabled
+    ) -> Bool {
         guard spring == nil, timestamp.isFinite, timestamp >= lastTimestamp,
               animationTime.isFinite else { return false }
         tracker.push(delta: 0, timestamp: timestamp)
@@ -79,7 +84,7 @@ final class WorkspaceSwipeMotion {
             to: destination,
             initialVelocity: velocity,
             startTime: animationTime,
-            config: Self.springConfig
+            config: motion.scaled(Self.springConfig)
         )
         return true
     }
